@@ -53,7 +53,7 @@ class _TeacherSubmissionsScreenState extends State<TeacherSubmissionsScreen> {
           id,
           content,
           submitted_at,
-          profiles:student_id(username, level),
+          profiles:student_id(username, level, full_name),
           homework:homework_id(title, teacher_id, level)
         ''').eq('homework.teacher_id', teacherId);
 
@@ -102,7 +102,13 @@ class _TeacherSubmissionsScreenState extends State<TeacherSubmissionsScreen> {
                 Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
                 const SizedBox(height: 20),
                 const Text('Override Mark', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                Text(submission['profiles']?['username'] ?? 'Student', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                 Text(
+                   (submission['profiles']?['full_name']?.toString().isNotEmpty == true &&
+                    submission['profiles']?['full_name'] != submission['profiles']?['username'])
+                       ? "${submission['profiles']?['full_name']} (${submission['profiles']?['username']})"
+                       : (submission['profiles']?['username'] ?? 'Student'),
+                   style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                 ),
                 const SizedBox(height: 16),
                 
                 // Student's Submitted Content
@@ -303,7 +309,11 @@ class _TeacherSubmissionsScreenState extends State<TeacherSubmissionsScreen> {
                   itemCount: submissions.length,
                   itemBuilder: (context, index) {
                     final item = submissions[index];
-                    final String studentName = item['profiles']?['username'] ?? 'Unknown';
+                    final String studentUsername = item['profiles']?['username'] ?? '';
+                    final String studentFullName = item['profiles']?['full_name'] ?? '';
+                    final String studentName = (studentFullName.isNotEmpty && studentFullName != studentUsername)
+                        ? '$studentFullName ($studentUsername)'
+                        : (studentUsername.isNotEmpty ? studentUsername : 'Unknown');
                     final String homeworkTitle = item['homework']?['title'] ?? 'Unknown';
                     final String homeworkLevel = item['homework']?['level'] ?? '';
                     final List<dynamic> results = item['results'] ?? [];

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'crop_image_screen.dart';
+import 'confirm_questions_screen.dart';
 import '../services/web_safe_file.dart';
 
 class TeacherUploadHomeworkSheet extends StatefulWidget {
@@ -142,7 +143,7 @@ class _TeacherUploadHomeworkSheetState extends State<TeacherUploadHomeworkSheet>
   }
 
   void _showPostDialog(File file, {required bool isImage}) {
-    DateTime selectedDueDate = DateTime.now().add(const Duration(days: 7));
+    DateTime selectedDueDate = DateTime.now();
     bool isUploadingLocal = false;
     String? errorMessage;
     showDialog(
@@ -196,11 +197,13 @@ class _TeacherUploadHomeworkSheetState extends State<TeacherUploadHomeworkSheet>
                 const SizedBox(height: 15),
                 InkWell(
                   onTap: () async {
+                    final DateTime now = DateTime.now();
                     final DateTime? picked = await showDatePicker(
                       context: ctx,
                       initialDate: selectedDueDate,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                      firstDate: now.subtract(const Duration(days: 1)),
+                      lastDate: now.add(const Duration(days: 365)),
+                      currentDate: now,
                     );
                     if (picked != null) {
                       setDialogState(() {
@@ -292,24 +295,29 @@ class _TeacherUploadHomeworkSheetState extends State<TeacherUploadHomeworkSheet>
                     
                     final String fileUrl = supabase.storage.from('homework_files').getPublicUrl(workingFileName);
 
-                    await supabase.from('homework').insert({
-                      'title': _titleController.text.trim(),
-                      'description': _descController.text.trim(),
-                      'level': _selectedLevel,
-                      'teacher_id': supabase.auth.currentUser!.id,
-                      'due_date': selectedDueDate.toIso8601String(),
-                      'questions': [],
-                      'file_url': fileUrl,
-                    });
+                    if (!ctx.mounted) return;
+                    Navigator.pop(ctx); // Close the upload dialog
+
+                    final success = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ConfirmQuestionsScreen(
+                          file: file,
+                          isImage: isImage,
+                          fileUrl: fileUrl,
+                          title: _titleController.text.trim(),
+                          description: _descController.text.trim(),
+                          level: _selectedLevel!,
+                          dueDate: selectedDueDate,
+                        ),
+                      ),
+                    );
 
                     _titleController.clear();
                     _descController.clear();
-                    
-                    if (!ctx.mounted) return;
-                    Navigator.pop(ctx);
-                    _fetchLastHomework();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Homework posted!")));
+
+                    if (success == true) {
+                      _fetchLastHomework();
                     }
                   } catch (e) {
                     debugPrint("Upload error details: $e");

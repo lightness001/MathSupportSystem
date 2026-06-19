@@ -1,6 +1,7 @@
 import 'dart:io' hide File, Directory;
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
@@ -29,11 +30,13 @@ class _LoginScreenState extends State<LoginScreen> {
   String _selectedRole = 'Student';
   String _selectedLevel = 'Standard 7';
   String _selectedSchool = 'Westfield Academy';
+  List<String> _teacherClasses = []; // classes assigned by admin during pre-registration
   List<Map<String, String>> _registerChildren = [
     {'username': '', 'school': 'Westfield Academy'}
   ];
   bool _isLogin = true;
   bool _isLoading = false;
+  bool _obscurePassword = true;
   List<School> _availableSchools = [];
 
   @override
@@ -119,6 +122,10 @@ class _LoginScreenState extends State<LoginScreen> {
           _showError("Please enter your Phone Number");
           return;
         }
+        if (phone.length != 10 || !RegExp(r'^\d{10}$').hasMatch(phone)) {
+          _showError("Phone Number must be exactly 10 digits and contain only numbers");
+          return;
+        }
       } else {
         if (rawUsername.isEmpty) {
           _showError("Please choose a username");
@@ -134,11 +141,31 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         return;
       }
+      final bool isNumeric = RegExp(r'^\d+$').hasMatch(rawUsername);
+      if (isNumeric && rawUsername.length != 10) {
+        _showError("Phone Number must be exactly 10 digits");
+        return;
+      }
+      if (RegExp(r'^\d').hasMatch(rawUsername) && !isNumeric) {
+        _showError("Phone Number must contain only numbers");
+        return;
+      }
     }
 
     if (password.length < 8) {
       _showError("Password must be at least 8 characters long");
       return;
+    }
+
+    if (_isLogin) {
+      final lockoutDuration = await LoginLockout.getRemainingLockout(effectiveUsername);
+      if (lockoutDuration != null) {
+        final minutes = lockoutDuration.inMinutes;
+        final seconds = lockoutDuration.inSeconds % 60;
+        final timeStr = minutes > 0 ? "$minutes minutes" : "$seconds seconds";
+        _showError("Too many failed login attempts. Temporarily locked out. Please try again in $timeStr.");
+        return;
+      }
     }
 
     final email = "${effectiveUsername}_private_app@mathsupport.tz";
@@ -153,6 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         if (response.user != null) {
+          await LoginLockout.recordSuccess(effectiveUsername);
           final userData = await Supabase.instance.client
               .from('profiles')
               .select()
@@ -384,6 +412,7 @@ class _LoginScreenState extends State<LoginScreen> {
           // Verify employee number in teacher_records
           bool employeeValid = false;
           String dbTeacherName = '';
+          List<String> dbTeacherClasses = []; // ← capture assigned classes
 
           try {
             final record = await Supabase.instance.client
@@ -400,6 +429,13 @@ class _LoginScreenState extends State<LoginScreen> {
               if (recordSchool == selectedSchoolLower) {
                 employeeValid = true;
                 dbTeacherName = record['full_name']?.toString() ?? fullName;
+                // Pull the classes the admin assigned to this teacher
+                final rawClasses = record['classes'];
+                if (rawClasses is List) {
+                  dbTeacherClasses = rawClasses.map((e) => e.toString()).toList();
+                } else if (rawClasses is String && rawClasses.isNotEmpty) {
+                  dbTeacherClasses = [rawClasses];
+                }
               } else {
                 _showError("Employee Number exists, but is assigned to a different school.");
                 setState(() => _isLoading = false);
@@ -423,6 +459,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (match != null) {
                   employeeValid = true;
                   dbTeacherName = match['full_name']?.toString() ?? fullName;
+                  final rawClasses = match['classes'];
+                  if (rawClasses is List) {
+                    dbTeacherClasses = rawClasses.map((e) => e.toString()).toList();
+                  } else if (rawClasses is String && rawClasses.isNotEmpty) {
+                    dbTeacherClasses = [rawClasses];
+                  }
                 }
               }
             } catch (localErr) {
@@ -438,6 +480,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
           // Automatically override registered name with official records
           fullName = dbTeacherName;
+          // Store classes into a state variable so the profile builder below can use them
+          _teacherClasses = dbTeacherClasses;
         }
 
         if (!_isLogin && _selectedRole == 'School Admin') {
@@ -546,6 +590,17 @@ class _LoginScreenState extends State<LoginScreen> {
               ? 'school_admin'
               : _selectedRole.toLowerCase();
 
+          // Resolve teacher's level: use assigned classes (comma-separated) so the
+          // dashboard knows the exact class(es) immediately on first login.
+          String teacherLevelValue;
+          if (_selectedRole == 'Teacher') {
+            teacherLevelValue = _teacherClasses.isNotEmpty
+                ? _teacherClasses.join(',')
+                : 'Teacher'; // fallback — teacher_dashboard will resolve via DB
+          } else {
+            teacherLevelValue = 'Teacher'; // not reached, but safe
+          }
+
           // 1. Create the Main Profile (with resilient School column support)
           final Map<String, dynamic> profileData = {
             'id': res.user!.id,
@@ -555,7 +610,7 @@ class _LoginScreenState extends State<LoginScreen> {
             'level': _selectedRole == 'Parent'
                 ? 'Parent'
                 : (_selectedRole == 'Teacher'
-                    ? 'Teacher'
+                    ? teacherLevelValue
                     : (_selectedRole == 'Admin' || _selectedRole == 'School Admin' ? 'Admin' : _selectedLevel)),
           };
           if (_selectedRole == 'Student' || _selectedRole == 'Teacher' || _selectedRole == 'School Admin') {
@@ -629,8 +684,14 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } on AuthException catch (error) {
+      if (_isLogin) {
+        await LoginLockout.recordFailure(effectiveUsername);
+      }
       _showError(error.message);
     } catch (e) {
+      if (_isLogin) {
+        await LoginLockout.recordFailure(effectiveUsername);
+      }
       debugPrint("Auth Process Error: $e");
       _showError("An error occurred during setup. Please try again.");
     } finally {
@@ -912,7 +973,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               Text(
-                _isLogin ? "Secure Academic Portal" : "Create New Account",
+                _isLogin ? "Academic Portal" : "Create New Account",
                 style: const TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 15),
@@ -942,17 +1003,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 20),
                 if (_selectedRole == 'Parent') ...[
                   TextField(
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
+                    ],
                     decoration: const InputDecoration(
                       labelText: "Phone Number",
                       prefixIcon: Icon(Icons.phone),
                       border: OutlineInputBorder(),
                     ),
                   ),
+                  const SizedBox(height: 20),
+                ],
                   const SizedBox(height: 20),
                   const Text(
                     "Link Children & Schools",
@@ -1112,11 +1178,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 20),
               TextField(
                 controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
                   labelText: "Password",
-                  prefixIcon: Icon(Icons.lock),
-                  border: OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.lock),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 30),
@@ -1134,7 +1211,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: _isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
                       : Text(
-                          _isLogin ? "LOGIN SECURELY" : "REGISTER NOW",
+                          _isLogin ? "LOGIN " : "REGISTER NOW",
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -1164,5 +1241,123 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+}
+
+class LoginLockout {
+  static final Map<String, int> _tempAttempts = {};
+  static final Map<String, DateTime> _tempLockoutUntil = {};
+
+  static Future<File> _getFile() async {
+    final directory = await AppSettings.getSafeDirectory();
+    return File('${directory.path}/login_lockout_records.json');
+  }
+
+  static Future<Map<String, dynamic>> _readRecords() async {
+    try {
+      final file = await _getFile();
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        if (content.isNotEmpty) {
+          return jsonDecode(content) as Map<String, dynamic>;
+        }
+      }
+    } catch (e) {
+      debugPrint("Error reading lockout records: $e");
+    }
+    return {};
+  }
+
+  static Future<void> _writeRecords(Map<String, dynamic> records) async {
+    try {
+      final file = await _getFile();
+      await file.writeAsString(jsonEncode(records));
+    } catch (e) {
+      debugPrint("Error writing lockout records: $e");
+    }
+  }
+
+  /// Checks if the username is locked out.
+  /// Returns null if not locked out, or the remaining Duration if locked out.
+  static Future<Duration?> getRemainingLockout(String username) async {
+    final cleanUsername = username.trim().toLowerCase();
+    
+    // In-memory check first (fast)
+    final memoryLock = _tempLockoutUntil[cleanUsername];
+    if (memoryLock != null) {
+      final now = DateTime.now();
+      if (memoryLock.isAfter(now)) {
+        return memoryLock.difference(now);
+      } else {
+        // Expired
+        _tempLockoutUntil.remove(cleanUsername);
+        _tempAttempts[cleanUsername] = 0;
+      }
+    }
+
+    // Persistent check
+    final records = await _readRecords();
+    if (records.containsKey(cleanUsername)) {
+      final data = records[cleanUsername] as Map<String, dynamic>;
+      final lockoutStr = data['lockout_until'];
+      if (lockoutStr != null) {
+        final lockoutTime = DateTime.parse(lockoutStr);
+        final now = DateTime.now();
+        if (lockoutTime.isAfter(now)) {
+          // Update memory cache
+          _tempLockoutUntil[cleanUsername] = lockoutTime;
+          return lockoutTime.difference(now);
+        } else {
+          // Expired
+          records.remove(cleanUsername);
+          await _writeRecords(records);
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Registers a failed attempt. Lockout if attempts >= 5.
+  static Future<void> recordFailure(String username) async {
+    final cleanUsername = username.trim().toLowerCase();
+    
+    // 1. Update in-memory
+    final currentAttempts = (_tempAttempts[cleanUsername] ?? 0) + 1;
+    _tempAttempts[cleanUsername] = currentAttempts;
+
+    // 2. Update persistent storage
+    final records = await _readRecords();
+    final userRecord = (records[cleanUsername] as Map<String, dynamic>?) ?? {
+      'failed_attempts': 0,
+      'lockout_until': null,
+    };
+
+    final persistentAttempts = (userRecord['failed_attempts'] as int? ?? 0) + 1;
+    userRecord['failed_attempts'] = persistentAttempts;
+
+    final maxAttempts = 5;
+    if (persistentAttempts >= maxAttempts || currentAttempts >= maxAttempts) {
+      final lockoutUntil = DateTime.now().add(const Duration(minutes: 15));
+      userRecord['lockout_until'] = lockoutUntil.toIso8601String();
+      
+      _tempLockoutUntil[cleanUsername] = lockoutUntil;
+      debugPrint("User $cleanUsername locked out until $lockoutUntil");
+    }
+
+    records[cleanUsername] = userRecord;
+    await _writeRecords(records);
+  }
+
+  /// Clears failed attempts. Called upon successful login.
+  static Future<void> recordSuccess(String username) async {
+    final cleanUsername = username.trim().toLowerCase();
+    _tempAttempts.remove(cleanUsername);
+    _tempLockoutUntil.remove(cleanUsername);
+
+    final records = await _readRecords();
+    if (records.containsKey(cleanUsername)) {
+      records.remove(cleanUsername);
+      await _writeRecords(records);
+    }
   }
 }

@@ -135,6 +135,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
 
   void _showClassManagementDialog() {
     List<String> tempSelection = List.from(_myClasses);
+    const allLevels = [
+      'Standard 4', 'Standard 7',
+    ];
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -143,7 +146,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           title: const Text("Manage Your Classes"),
           content: Column(
             mainAxisSize: MainAxisSize.min,
-            children: ['Standard 4', 'Standard 7'].map((level) {
+            children: allLevels.map((level) {
               bool isSelected = tempSelection.contains(level);
               return CheckboxListTile(
                 title: Text(level), value: isSelected,

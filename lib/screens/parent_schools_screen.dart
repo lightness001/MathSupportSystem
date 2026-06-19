@@ -253,8 +253,10 @@ class _ParentSchoolsScreenState extends State<ParentSchoolsScreen> {
           gradeText = level.replaceAll(RegExp(r'standard', caseSensitive: false), 'Grade');
         }
 
-        final String displayName = usernameToFullName[username.trim().toLowerCase()] ??
-            (username.isNotEmpty ? username[0].toUpperCase() + username.substring(1) : 'Student');
+        final String resolvedFullName = usernameToFullName[username.trim().toLowerCase()] ?? '';
+        final String displayName = resolvedFullName.isNotEmpty
+            ? '$resolvedFullName ($username)'
+            : (username.isNotEmpty ? username[0].toUpperCase() + username.substring(1) : 'Student');
 
         groupedSchools[school]!.add({
           'name': displayName,

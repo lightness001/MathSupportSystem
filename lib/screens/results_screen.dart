@@ -87,6 +87,25 @@ class ResultsScreen extends StatelessWidget {
                     
                     result['homework_title'] = hwTitle;
                     results.add(result);
+                  } else {
+                    // Submission exists but no result row yet — pending review!
+                    final Map<String, dynamic> result = {
+                      'id': 'pending_${sub['id']}',
+                      'score': -1.0, // Special flag for pending
+                      'feedback': 'Your homework has been submitted successfully and is awaiting teacher review.',
+                      'created_at': sub['submitted_at'],
+                      'submission_id': sub['id'].toString(),
+                    };
+                    
+                    final dynamic rawHw = sub['homework'];
+                    String hwTitle = 'Assignment';
+                    if (rawHw is Map) {
+                      hwTitle = rawHw['title'] ?? 'Assignment';
+                    } else if (rawHw is List && rawHw.isNotEmpty) {
+                      hwTitle = rawHw[0]['title'] ?? 'Assignment';
+                    }
+                    result['homework_title'] = hwTitle;
+                    results.add(result);
                   }
                 }
 
@@ -94,12 +113,17 @@ class ResultsScreen extends StatelessWidget {
                   return _buildEmptyState();
                 }
 
-                // Calculate overall average
+                // Calculate overall average of graded items only
                 double total = 0;
+                int gradedCount = 0;
                 for (var r in results) {
-                  total += (r['score'] as num).toDouble();
+                  final double s = (r['score'] as num).toDouble();
+                  if (s >= 0) {
+                    total += s;
+                    gradedCount++;
+                  }
                 }
-                final double avg = total / results.length;
+                final double avg = gradedCount > 0 ? total / gradedCount : 0.0;
 
                 return Column(
                   children: [
@@ -121,8 +145,9 @@ class ResultsScreen extends StatelessWidget {
                         itemBuilder: (context, index) {
                           final item = results[index];
                           final double score = (item['score'] as num).toDouble();
+                          final bool isPending = score < 0;
                           final String title = item['homework_title'] ?? 'Assignment';
-                          final String grade = AssessmentEngine.evaluate(
+                          final String grade = isPending ? 'P' : AssessmentEngine.evaluate(
                             correctCount: score.toInt(),
                             totalQuestions: 100,
                             topic: title,
@@ -165,7 +190,7 @@ class ResultsScreen extends StatelessWidget {
                                     width: 50,
                                     height: 50,
                                     decoration: BoxDecoration(
-                                      color: AssessmentEngine.colorForPercent(score),
+                                      color: isPending ? Colors.orange : AssessmentEngine.colorForPercent(score),
                                       shape: BoxShape.circle,
                                     ),
                                     alignment: Alignment.center,
@@ -195,13 +220,22 @@ class ResultsScreen extends StatelessWidget {
                                           style: TextStyle(color: Colors.grey[500], fontSize: 12),
                                         ),
                                         const SizedBox(height: 4),
-                                        LinearProgressIndicator(
-                                          value: score / 100,
-                                          backgroundColor: Colors.grey[200],
-                                          color: AssessmentEngine.colorForPercent(score),
-                                          minHeight: 5,
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
+                                        if (isPending)
+                                          const Text(
+                                            "Pending Teacher Marking",
+                                            style: TextStyle(
+                                                color: Colors.orange,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12),
+                                          )
+                                        else
+                                          LinearProgressIndicator(
+                                            value: score / 100,
+                                            backgroundColor: Colors.grey[200],
+                                            color: AssessmentEngine.colorForPercent(score),
+                                            minHeight: 5,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
                                       ],
                                     ),
                                   ),
@@ -209,13 +243,22 @@ class ResultsScreen extends StatelessWidget {
                                   Column(
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
-                                      Text(
-                                        '${score.toInt()}%',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18,
-                                            color: AssessmentEngine.colorForPercent(score)),
-                                      ),
+                                      if (isPending)
+                                        const Text(
+                                          'PENDING',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                              color: Colors.orange),
+                                        )
+                                      else
+                                        Text(
+                                          '${score.toInt()}%',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 18,
+                                              color: AssessmentEngine.colorForPercent(score)),
+                                        ),
                                       const SizedBox(height: 4),
                                       const Icon(Icons.chevron_right, color: Colors.grey, size: 18),
                                     ],

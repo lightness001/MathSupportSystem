@@ -103,7 +103,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text("Hello Parent,", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              Text("Overview for $displayName (${widget.level})", style: const TextStyle(fontSize: 14, color: Colors.grey)),
+              Text(
+                "Overview for $displayName ${displayName != widget.childName ? '(${widget.childName})' : ''} (${widget.level})",
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
+              ),
               const SizedBox(height: 25),
 
               // DYNAMIC STAT CARDS

@@ -374,7 +374,7 @@ class StudentFeedbackLoader extends StatelessWidget {
         backgroundColor: const Color(0xFF0D47A1),
         foregroundColor: Colors.white,
       ),
-      body: FutureBuilder<Map<String, dynamic>>(
+      body: FutureBuilder<Map<String, dynamic>?>(
         future: supabase
             .from('results')
             .select('''
@@ -384,15 +384,39 @@ class StudentFeedbackLoader extends StatelessWidget {
               )
             ''')
             .eq('submission_id', submissionId)
-            .single(),
+            .maybeSingle(),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snap.hasError || !snap.hasData) {
+          if (snap.hasError) {
             return Center(child: Text('Error: ${snap.error}'));
           }
-          final data = snap.data!;
+          final data = snap.data;
+          if (data == null) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.hourglass_empty_rounded, size: 80, color: Colors.orange),
+                    SizedBox(height: 16),
+                    Text(
+                      "Awaiting Teacher Mark",
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      "Your submission has been received. Your teacher will review and grade your mathematics work shortly.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
           final hwQuestions = data['submissions']?['homework']
               ?['questions'] as List<dynamic>? ??
               [];

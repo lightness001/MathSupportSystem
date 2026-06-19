@@ -201,7 +201,10 @@ class _StudentDashboardState extends State<StudentDashboard> {
       HomeworkScreen(studentLevel: widget.studentLevel),
       const ResultsScreen(),
       StudentSettingsScreen(studentLevel: widget.studentLevel),
-      MathQuizScreen(onQuit: () => setState(() => _currentIndex = 0)), // Sub-screen Index 4
+      MathQuizScreen(
+        studentLevel: widget.studentLevel,
+        onQuit: () => setState(() => _currentIndex = 0),
+      ), // Sub-screen Index 4
     ];
 
     final appBarTitles = [
