@@ -133,8 +133,19 @@ class _ParentDashboardState extends State<ParentDashboard> {
       // Filter only children belonging to selected school
       final filteredData = fetchedData.where((child) => child['school'] == widget.selectedSchool).toList();
 
+      // De-duplicate children by username to prevent Dropdown crash and visual duplicates
+      final List<Map<String, String>> deDuplicated = [];
+      final Set<String> seenUsernames = {};
+      for (var child in filteredData) {
+        final String uname = (child['username'] ?? '').toLowerCase();
+        if (uname.isNotEmpty && !seenUsernames.contains(uname)) {
+          seenUsernames.add(uname);
+          deDuplicated.add(child);
+        }
+      }
+
       setState(() {
-        _linkedChildrenData = filteredData;
+        _linkedChildrenData = deDuplicated;
         if (_linkedChildrenData.isNotEmpty) {
           _selectedChild = _linkedChildrenData.first['username']!;
         }
@@ -484,6 +495,27 @@ class _ParentDashboardState extends State<ParentDashboard> {
                   }
 
                   final userId = Supabase.instance.client.auth.currentUser!.id;
+
+                  // Check if student is already linked to this parent
+                  final existingLink = await Supabase.instance.client
+                      .from('parent_child_links')
+                      .select()
+                      .eq('parent_id', userId)
+                      .eq('student_username', newChild)
+                      .maybeSingle();
+
+                  if (existingLink != null) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(_t("Student '$newChild' is already linked to your account.", "Mwanafunzi '$newChild' tayari ameunganishwa kwenye akaunti yako.")),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    }
+                    setState(() => _isLoading = false);
+                    return;
+                  }
 
                   // 2. Try inserting child using actual level + school
                   try {
