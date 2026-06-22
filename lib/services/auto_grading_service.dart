@@ -171,21 +171,6 @@ class AutoGradingService {
       }
     }
 
-    // 2. Combine the text inputs
-    final String combinedStudentSubmission = [
-      if (studentTextAnswer.isNotEmpty) studentTextAnswer,
-      if (extractedText.isNotEmpty) "[Extracted from Uploaded Image (OCR)]:\n$extractedText",
-    ].join("\n\n");
-    // 1. OCR student image (mobile only)
-    if (localFile != null && _isImageFile(localFile.path)) {
-      try {
-        extractedText = await _performOcr(localFile);
-        debugPrint('[AutoGrading] OCR success — ${extractedText.length} chars');
-      } catch (e) {
-        debugPrint('[AutoGrading] OCR skipped: $e');
-      }
-    }
-
     // 2. Build combined student submission
     final String combinedStudentSubmission = [
       if (studentTextAnswer.isNotEmpty) studentTextAnswer,
@@ -281,162 +266,6 @@ class AutoGradingService {
       totalQuestions: fallbackResult.totalQuestions,
       recommendation: fallbackResult.recommendation,
       errorMessage: geminiError,
-    );
-  }
-
-        feedback:
-            'We could not find any text answers or readable handwriting in '
-            'your submission. Please try again or re-upload a clearer picture.',
-        gradingSource: 'System',
-        recommendation:
-            'Rewrite your answers clearly on paper or type them directly.',
-      );
-    }
-
-    // 3. OCR teacher sheet for rule-engine fallback (used by quiz path)
-    String teacherOcrText = '';
-    if (!kIsWeb &&
-        teacherFileUrl != null &&
-        teacherFileUrl.isNotEmpty &&
-        _isImageFile(teacherFileUrl)) {
-      try {
-        final res = await http
-            .get(Uri.parse(teacherFileUrl))
-            .timeout(const Duration(seconds: 20));
-        if (res.statusCode == 200) {
-          final tmp = File(
-            '${Directory.systemTemp.path}/teacher_${DateTime.now().millisecondsSinceEpoch}.jpg',
-          );
-          await tmp.writeAsBytes(res.bodyBytes);
-          teacherOcrText = await _performOcr(tmp);
-          try { await tmp.delete(); } catch (_) {}
-          debugPrint('[AutoGrading] Teacher OCR: ${teacherOcrText.length} chars');
-        }
-      } catch (e) {
-        debugPrint('[AutoGrading] Teacher OCR skipped: $e');
-      }
-    }
-
-    // ── Quiz homework: rule engine (offline-capable, 100 % accurate) ──
-    final bool isQuizHomework =
-        templateQuestions != null && templateQuestions.isNotEmpty;
-
-    if (isQuizHomework) {
-      debugPrint('[AutoGrading] Quiz homework → rule engine.');
-      final r = _gradeWithRuleEngine(
-        homeworkTitle: homeworkTitle,
-        homeworkDescription: homeworkDescription,
-        studentSubmission: combinedStudentSubmission,
-        templateQuestions: templateQuestions,
-        teacherOcrText: teacherOcrText,
-        geminiError: null,
-      );
-      return AutoGradingResult(
-        score: r.score,
-        feedback: r.feedback,
-        extractedText: extractedText,
-        gradingSource: r.gradingSource,
-        correctCount: r.correctCount,
-        totalQuestions: r.totalQuestions,
-        recommendation: r.recommendation,
-      );
-    }
-
-    // ── Document homework: Gemini AI with local Rule Engine fallback ──────────
-    final apiKey = _apiKey;
-    bool isGeminiAvailable = apiKey.isNotEmpty && apiKey != 'YOUR_GEMINI_API_KEY_HERE';
-    String lastError = isGeminiAvailable ? '' : 'Gemini API key is not configured.';
-
-    if (isGeminiAvailable) {
-      // Three progressive attempts — each removes one heavy payload so that
-      // slow / metered connections still have a chance.
-      final attempts = [
-        _GradingAttempt(
-          label: 'Attempt 1 (full vision)',
-          teacherFileUrl: teacherFileUrl,
-          studentLocalFile: localFile,
-          delayBeforeSeconds: 0,
-        ),
-        _GradingAttempt(
-          label: 'Attempt 2 (teacher file only)',
-          teacherFileUrl: teacherFileUrl,
-          studentLocalFile: null,
-          delayBeforeSeconds: 3,
-        ),
-        _GradingAttempt(
-          label: 'Attempt 3 (text-only)',
-          teacherFileUrl: null,
-          studentLocalFile: null,
-          delayBeforeSeconds: 6,
-        ),
-      ];
-
-      for (final attempt in attempts) {
-        if (attempt.delayBeforeSeconds > 0) {
-          debugPrint(
-            '[AutoGrading] Waiting ${attempt.delayBeforeSeconds}s before ${attempt.label}...',
-          );
-          await Future.delayed(Duration(seconds: attempt.delayBeforeSeconds));
-        }
-
-        try {
-          debugPrint('[AutoGrading] ${attempt.label}...');
-          final result = await _gradeWithGemini(
-            homeworkTitle: homeworkTitle,
-            homeworkDescription: homeworkDescription,
-            studentSubmission: combinedStudentSubmission,
-            apiKey: apiKey,
-            teacherFileUrl: attempt.teacherFileUrl,
-            studentLocalFile: attempt.studentLocalFile,
-          );
-
-          debugPrint('[AutoGrading] ✓ ${attempt.label} succeeded.');
-          final String jsonFeedback = jsonEncode({
-            'feedback': result['feedback'],
-            'recommendation': result['recommendation'],
-            'revisionQuestions': result['revisionQuestions'] ?? <String>[],
-          });
-          return AutoGradingResult(
-            score: (result['score'] as num).toDouble(),
-            feedback: jsonFeedback,
-            extractedText: extractedText,
-            gradingSource: 'Gemini AI',
-            correctCount: result['correctCount'] as int?,
-            totalQuestions: result['totalQuestions'] as int?,
-            recommendation: result['recommendation']?.toString() ??
-                'Review your teacher\'s corrections.',
-            revisionQuestions:
-                List<String>.from(result['revisionQuestions'] ?? []),
-          );
-        } catch (e) {
-          lastError = e.toString();
-          debugPrint('[AutoGrading] ${attempt.label} failed: $lastError');
-        }
-      }
-    }
-
-    // Gemini failed or was unavailable. Let's fall back to our local smart rule engine!
-    debugPrint('[AutoGrading] Gemini unavailable or failed ($lastError). Falling back to local Rule Engine...');
-    try {
-      final r = _gradeWithRuleEngine(
-        homeworkTitle: homeworkTitle,
-        homeworkDescription: homeworkDescription,
-        studentSubmission: combinedStudentSubmission,
-        templateQuestions: templateQuestions,
-        teacherOcrText: teacherOcrText,
-        geminiError: lastError,
-      );
-      if (r.score >= 0) {
-        debugPrint('[AutoGrading] Local Rule Engine succeeded with score: ${r.score}');
-        return r;
-      }
-    } catch (fallbackErr) {
-      debugPrint('[AutoGrading] Local Rule Engine fallback failed: $fallbackErr');
-    }
-
-    // If both failed and we couldn't grade:
-    throw GradingNetworkException(
-      'Could not grade submission: Gemini API error ($lastError) and rule engine fallback failed.',
     );
   }
 
@@ -552,125 +381,33 @@ You are a professional, highly precise AI homework marking engine for primary an
 
 Your job is to:
 1. Carefully read the teacher's homework assignment (from the homework sheet image/document AND/OR the text description below).
-2. Solve or research EVERY question on the homework to determine the 100% correct answer for each — regardless of subject (Mathematics, Science, English, Swahili, Geography, History, Social Studies, CRE/IRE, Mixed-topic, etc.).
-    // ── Mathematics Homework Grading Prompt ──
-    // Handles: Mathematics MCQ, Fill-in-the-blank, Short answer, and Word problems.
-    final String prompt = """
-You are a professional, highly precise AI Mathematics homework marking engine for primary and secondary school students.
-
-Your job is to:
-1. Carefully read the teacher's homework assignment (from the homework sheet image/document AND/OR the text description below).
-2. Solve EVERY mathematics question on the homework to determine the 100% correct numerical/analytical answer for each.
+2. Solve every question on the homework to determine the correct answer for each.
 3. Extract the student's answers from their submission (typed text and/or handwritten image).
 4. Mark each question: CORRECT if the student's answer matches the correct answer, INCORRECT otherwise.
-5. Produce a fair, honest, and detailed result.
+5. Provide clear, honest feedback and correct answers for any missed questions.
 
-═══════════════════════════════════════════════════════
- HOMEWORK INFORMATION PROVIDED BY THE TEACHER
-═══════════════════════════════════════════════════════
 Title/Topic: $homeworkTitle
-Text Instructions / Questions (if any): 
+Text Instructions / Questions (if any):
 ${homeworkDescription.isNotEmpty ? homeworkDescription : "(See the attached homework sheet image/document)"}
 
-═══════════════════════════════════════════════════════
- STUDENT'S TYPED ANSWER (if any)
-═══════════════════════════════════════════════════════
+Student's submission:
 ${studentSubmission.isNotEmpty ? studentSubmission : "(See the attached student answer sheet image)"}
 
-⚠️ CRITICAL NOTE ON READING STUDENT TYPED ANSWERS:
-The student may format their answers as "1.10488" meaning Question 1 Answer is 10488.
-The number before the dot/period is the QUESTION NUMBER. The number after is the ANSWER.
-Do NOT treat "1.10488" as a single decimal number 1.10488.
-Always read student answers as: [question_number].[answer_value]
-For example:
-  1.10488   → Q1 answer = 10488
-  2.104     → Q2 answer = 104
-  3.120     → Q3 answer = 120
-  4.75%     → Q4 answer = 75%
-  5.1575000 → Q5 answer = 1,575,000
-Numbers with or without commas are equivalent (10488 = 10,488).
-Percentages: 75% = 75 percent — treat as equivalent to the decimal/percentage form.
+Important rules:
+- Interpret "1.10488" as question 1 answer = 10488, not decimal 1.10488.
+- Treat commas as optional in numbers: 10,488 = 10488.
+- Treat percentages consistently: 75% = 75 percent.
+- Count every numbered or lettered question that requires an answer.
 
-═══════════════════════════════════════════════════════
- MARKING RULES — READ CAREFULLY
-═══════════════════════════════════════════════════════
-
-STEP 1 – COUNT TOTAL QUESTIONS (N):
-  • Scan the teacher's homework sheet (image or text) carefully.
-  • Count EVERY numbered or lettered item (1, 2, 3 ... or a, b, c ...) that requires an answer.
-  • Do NOT count headings, instructions, examples, or decorative labels.
-  • This count becomes N (the total). N must be accurate — never assume or estimate it.
-
-STEP 2 – ESTABLISH THE CORRECT ANSWER FOR EACH QUESTION:
-  • For MATHEMATICS: Compute the correct numerical result step-by-step.
-  • For SCIENCE: Use verified scientific facts (biology, chemistry, physics, environmental science).
-  • For ENGLISH: Apply correct grammar, spelling, comprehension, and vocabulary knowledge.
-  • For SWAHILI / KISWAHILI: Use correct Swahili grammar, vocabulary, and structure.
-  • For GEOGRAPHY: Use verified geographical facts (capitals, regions, landforms, climate, etc.).
-  • For HISTORY / SOCIAL STUDIES: Use accurate historical facts and social knowledge.
-  • For MCQ (Multiple Choice): Identify the correct option from those provided.
-  • For Fill-in-the-blank: Determine the correct word/phrase/number that completes the sentence.
-  • For Short Answer / Essay: Assess whether the student's answer correctly addresses the key points asked.
-  • For Mixed-topic sheets: Handle each question by its own subject area.
-  • If a question is ambiguous, apply reasonable interpretation and note it in feedback.
-
-STEP 3 – EXTRACT STUDENT'S ANSWERS:
-  • Typed text answers are in the student submission section above.
-  • Handwritten answers will be in the student's image attachment (if provided).
-  • For handwriting: be generous with legibility — if the intent is clear and the value is correct, mark as CORRECT.
-  • Compute the correct numerical result step-by-step for each math question.
-  • For MCQ (Multiple Choice): Identify the correct mathematical option from those provided.
-  • For Fill-in-the-blank: Determine the correct number or expression that completes the answer.
-  • For Word problems: Solve the question step-by-step to arrive at the final number.
-  • If a question is ambiguous, apply reasonable mathematical interpretation and note it in feedback.
-
-STEP 3 – EXTRACT STUDENT'S ANSWERS:
-  • Typed text answers are in the student submission section above.
-  • IMPORTANT: If the student wrote "1.10488", read this as Q1=10488, NOT as a decimal 1.10488.
-  • Handwritten answers will be in the student's image attachment (if provided).
-  • For handwriting: be generous with legibility — if the intent is clear and the value is correct, mark as CORRECT.
-  • Numbers with commas and without commas are the same: 10,488 = 10488.
-  • Percentages: 75% is the same as 75 percent. Accept both forms.
-  • Match answers by question number/letter.
-
-STEP 4 – MARK EACH QUESTION:
-  • Compare the student's answer with the correct answer.
-  • Accept minor formatting differences: 10488 = 10,488; 75% = 75 percent; 120cm² = 120.
-  • Count correct answers as C.
-  • Count unanswered questions as INCORRECT.
-  • Partial credit: only award full marks — no half marks unless explicitly instructed.
-
-STEP 5 – CALCULATE SCORE:
-  • Score percentage = (C / N) × 100
-  • Be absolutely honest. Never inflate scores. Never deflate scores.
-  • If N = 0 (no questions found), return an error in the feedback field.
-
-STEP 6 – PROVIDE FEEDBACK AND REVISION EXERCISES:
-  • Feedback: Concise, encouraging 2-sentence summary mentioning how many the student got right.
-  • Recommendation: List the CORRECT ANSWERS for ALL missed questions by question number so the student knows what the right answer was (e.g., "Q3: Paris, Q5: 24 cm²"). Maximum 3 sentences.
-  • Revision Questions: 2–3 tailored practice questions based exactly on the topics/subtopics the student got wrong. Make them specific, not generic.
-
-═══════════════════════════════════════════════════════
- RESPONSE FORMAT (STRICT JSON — NO MARKDOWN BLOCKS)
-═══════════════════════════════════════════════════════
+Return strict JSON only in the format:
 {
-  "score": <number: percentage score e.g. 83.3>,
-  "correctCount": <integer: C — number of correct answers>,
-  "totalQuestions": <integer: N — total questions counted from the teacher's sheet>,
-  "feedback": "<2 sentences: honest, encouraging summary of the student's performance>",
-  "recommendation": "<Up to 3 sentences: list the correct answers for all missed questions by number, plus one actionable study tip>",
-  "revisionQuestions": [
-    "<Specific revision question 1 matching a missed topic>",
-    "<Specific revision question 2 matching a missed topic>",
-    "<Specific revision question 3 if applicable>"
-  ]
+  "score": <number>,
+  "correctCount": <integer>,
+  "totalQuestions": <integer>,
+  "feedback": "<2 sentences>",
+  "recommendation": "<Up to 3 sentences>",
+  "revisionQuestions": ["<question1>", "<question2>", "<question3>"]
 }
-
-IMPORTANT:
-- Return ONLY the JSON object above. No explanation, no markdown, no code fences.
-- totalQuestions MUST equal the actual count of questions on the teacher's homework sheet — never default to 0 or 1 without evidence.
-- correctCount + incorrect count must equal totalQuestions exactly.
-- score must equal (correctCount / totalQuestions) * 100 exactly.
 """;
 
     final List<Map<String, dynamic>> parts = [];
@@ -967,31 +704,29 @@ IMPORTANT:
   }
 
   /// Parses homework description/OCR text to extract questions and calculate correct answers.
-  static Map<int, double> _extractQuestionsFromDescription(String description) {
-    Map<int, double> questions = {};
   static Map<int, double?> _extractQuestionsFromDescription(String description) {
-    Map<int, double?> questions = {};
+    final Map<int, double?> questions = {};
     final lines = description.split('\n');
     final qNumRegex = RegExp(r'(?:^|[^0-9])(\d+)\s*[\.\)\-\:]');
     final mathRegex = RegExp(r'(\d+[\d\s\+\-\*\/x×÷,\.]*\d+)');
-    
+
     for (var rawLine in lines) {
       final line = rawLine.trim();
       if (line.isEmpty) continue;
-      
+
       final matches = qNumRegex.allMatches(line).toList();
       for (int k = 0; k < matches.length; k++) {
         final m = matches[k];
         final int qNum = int.parse(m.group(1)!);
         if (qNum > 100) continue;
-        
+
         final int start = m.end;
         final int end = (k + 1 < matches.length) ? matches[k + 1].start : line.length;
         final remainingText = line.substring(start, end).trim();
-        
+
         double? val;
         final lower = remainingText.toLowerCase();
-        
+
         final numRegex = RegExp(r'(\d+/\d+)|(\d+(?:\.\d+)?)');
         final allNums = numRegex.allMatches(remainingText.replaceAll(',', ''))
             .map((match) {
@@ -1008,7 +743,7 @@ IMPORTANT:
             })
             .whereType<double>()
             .toList();
-            
+
         if (lower.contains('percent') || lower.contains('percentage')) {
           if (allNums.isNotEmpty) {
             final numVal = allNums.first;
@@ -1028,10 +763,7 @@ IMPORTANT:
             val = _evaluateExpression(mathMatch.group(1)!);
           }
         }
-        
-        if (val != null) {
-          questions[qNum] = val;
-        // Store the value (even if null) so the question number is not skipped!
+
         questions[qNum] = val;
       }
     }
@@ -1046,6 +778,8 @@ IMPORTANT:
         }
       }
     }
+
+    return questions;
 
     // Fallback: If no question numbers were found, find all math expressions sequentially
     if (questions.isEmpty) {

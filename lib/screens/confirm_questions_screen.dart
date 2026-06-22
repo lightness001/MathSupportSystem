@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/auto_grading_service.dart';
+import '../services/auto_grading_service.dart' hide debugPrint;
 import '../services/web_safe_file.dart';
 
 class ConfirmQuestionsScreen extends StatefulWidget {

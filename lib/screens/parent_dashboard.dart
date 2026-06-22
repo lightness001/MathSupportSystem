@@ -274,10 +274,6 @@ class _ParentDashboardState extends State<ParentDashboard> {
                               icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
                               selectedItemBuilder: (BuildContext context) {
                                 return _linkedChildrenData.map<Widget>((child) {
-                                  return Container(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      child['fullName'] ?? child['username'] ?? '',
                                   final String uname = child['username'] ?? '';
                                   final String fn = child['fullName'] ?? '';
                                   final String disp = (fn.isNotEmpty && fn != uname) ? "$fn ($uname)" : uname;
@@ -296,18 +292,15 @@ class _ParentDashboardState extends State<ParentDashboard> {
                                 }).toList();
                               },
                               items: _linkedChildrenData.map((child) {
-                                return DropdownMenuItem<String>(
-                                  value: child['username'],
-                                  child: Text(
-                                    "${child['fullName'] ?? child['username']} (${child['school']})",
                                 final String uname = child['username'] ?? '';
                                 final String fn = child['fullName'] ?? '';
                                 final String disp = (fn.isNotEmpty && fn != uname) ? "$fn ($uname)" : uname;
                                 return DropdownMenuItem<String>(
                                   value: child['username'],
                                   child: Text(
-                                    "$disp (${child['school']})",
+                                    "$disp (${child['school'] ?? ''})",
                                     style: const TextStyle(color: Colors.white, fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 );
                               }).toList(),

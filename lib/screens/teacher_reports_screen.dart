@@ -114,7 +114,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
         if (_activeClass != 'All My Classes' && hw['level'] != _activeClass) continue;
 
         final String hwLevel = hw['level'] ?? 'Standard 7';
-        final levelStudentsRes = await supabase.from('profiles').select('id, username').ilike('role', 'student').eq('level', hwLevel).eq('status', 'active');
         final levelStudentsRes = await supabase.from('profiles').select('id, username, full_name').ilike('role', 'student').eq('level', hwLevel).eq('status', 'active');
         
         for (var student in (levelStudentsRes as List)) {
@@ -279,7 +278,6 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                             subtitle: Text("Missing: ${item['homework']} (${item['level']})"),
                             trailing: const Text("PENDING", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10)),
                           ),
-                        )),
                         )).toList(),
                       const SizedBox(height: 50),
                     ],

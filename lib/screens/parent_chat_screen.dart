@@ -75,7 +75,6 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       final studentRes = await supabase
           .from('profiles')
           .select('full_name, school')
-          .select('full_name')
           .eq('username', widget.selectedChild)
           .maybeSingle();
       if (studentRes != null) {
@@ -132,35 +131,23 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
 
       // Filter DB teachers to match child's school and level
       _filteredAvailableTeachers = _dbTeachers.where((t) {
-        final String tSchool = (t['school'] ?? '').toString().toLowerCase().trim();
-        final String tLevel = (t['level'] ?? '').toString().toLowerCase().trim();
+        final String? teacherSchoolRaw = t['school']?.toString();
+        final String? teacherLevelRaw = t['level']?.toString();
         final String childSchool = _schoolName.toLowerCase().trim();
         final String childLevel = widget.currentLevel.toLowerCase().trim();
 
-        final bool schoolMatches = childSchool.isNotEmpty &&
-            tSchool.isNotEmpty &&
-            tSchool == childSchool;
+        final String teacherSchool = teacherSchoolRaw?.toLowerCase().trim() ?? '';
+        final String teacherLevel = teacherLevelRaw?.toLowerCase().trim() ?? '';
 
-        final bool levelMatches = tLevel.isEmpty ||
-            tLevel == 'teacher' ||
-            tLevel.contains(childLevel) ||
-            childLevel.contains(tLevel);
+        final bool schoolMatches = teacherSchoolRaw == null ||
+            teacherSchoolRaw.trim().isEmpty ||
+            teacherSchool == childSchool;
 
-        final String? tSchool = t['school'];
-        final String? tLevel = t['level'];
-        
-        final String childSchool = _schoolName;
-        final String childLevel = widget.currentLevel;
-        
-        bool schoolMatches = tSchool == null ||
-            tSchool.trim().isEmpty ||
-            tSchool.toLowerCase().trim() == childSchool.toLowerCase().trim();
-            
-        bool levelMatches = tLevel == null ||
-            tLevel.toLowerCase() == 'teacher' ||
-            tLevel.toLowerCase().contains(childLevel.toLowerCase()) ||
-            childLevel.toLowerCase().contains(tLevel.toLowerCase());
-            
+        final bool levelMatches = teacherLevelRaw == null ||
+            teacherLevel == 'teacher' ||
+            teacherLevel.contains(childLevel) ||
+            childLevel.contains(teacherLevel);
+
         return schoolMatches && levelMatches;
       }).toList();
     } catch (e) {
@@ -233,12 +220,12 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       for (int i = 0; i < _filteredAvailableTeachers.length; i++) {
         final teacher = _filteredAvailableTeachers[i];
         final String chatKey = "${widget.selectedChild}_${teacher['id']}";
-        
+
         // Do not seed fake conversations; leave chat history empty until there is real data.
         if (!data.containsKey(chatKey)) {
           final now = DateTime.now();
           List<Map<String, dynamic>> messagesList = [];
-          
+
           if (i == 0) {
             messagesList = [
               {
@@ -299,9 +286,8 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
             ];
             unreadCounts[chatKey] = 0;
           }
-          
+
           data[chatKey] = messagesList;
-          dirty = true;
         }
       }
 
@@ -334,29 +320,20 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
         DateTime sortTime = DateTime.fromMillisecondsSinceEpoch(0);
         if (lastMsg['date'] != null) {
           sortTime = DateTime.parse(lastMsg['date']);
-        List<dynamic> history = data[chatKey] ?? [];
-        if (history.isNotEmpty) {
-          final lastMsg = history.last;
-          final String lastMsgText = lastMsg['imagePath'] != null ? "📷 Attachment" : (lastMsg['text'] ?? "");
-          final String lastMsgTime = lastMsg['time'] ?? "";
-          DateTime sortTime = DateTime.fromMillisecondsSinceEpoch(0);
-          if (lastMsg['date'] != null) {
-            sortTime = DateTime.parse(lastMsg['date']);
-          }
-
-          final unreadCount = unreadCounts[chatKey] ?? 0;
-          final isUrgent = urgents[chatKey] ?? false;
-
-          conversations.add({
-            'teacher': teacher,
-            'chatKey': chatKey,
-            'lastMessage': lastMsgText,
-            'time': lastMsgTime,
-            'sortTime': sortTime,
-            'unreadCount': unreadCount,
-            'isUrgent': isUrgent,
-          });
         }
+
+        final unreadCount = unreadCounts[chatKey] ?? 0;
+        final isUrgent = urgents[chatKey] ?? false;
+
+        conversations.add({
+          'teacher': teacher,
+          'chatKey': chatKey,
+          'lastMessage': lastMsgText,
+          'time': lastMsgTime,
+          'sortTime': sortTime,
+          'unreadCount': unreadCount,
+          'isUrgent': isUrgent,
+        });
       }
 
       // Sort: urgent first, then by last message timestamp (most recent first)

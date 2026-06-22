@@ -7,9 +7,6 @@ import '../main.dart';
 
 class ParentProgressScreen extends StatelessWidget {
   final String childName;
-  final String level;
-
-  const ParentProgressScreen({super.key, required this.childName, required this.level});
   final String fullName;
   final String level;
 
@@ -352,7 +349,6 @@ class ParentProgressScreen extends StatelessWidget {
                       ],
                     ),
                   )),
-                  )).toList(),
                   const SizedBox(height: 20),
                 ],
 

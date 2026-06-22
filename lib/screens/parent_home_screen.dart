@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/auto_grading_service.dart';
+import '../services/auto_grading_service.dart' hide debugPrint;
 import '../services/assessment_engine.dart';
 import '../main.dart';
 
@@ -132,7 +132,6 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                     title: Text("$m is PENDING", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                     subtitle: const Text("Your child hasn't finished this yet."),
                   ),
-                )),
                 )).toList(),
                 const SizedBox(height: 30),
               ],
@@ -167,7 +166,6 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                       ],
                     ),
                   ),
-                )),
                 )).toList(),
               
               const SizedBox(height: 40),
@@ -377,7 +375,6 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                       ],
                     ),
                   )),
-                  )).toList(),
                   const SizedBox(height: 20),
                 ],
 

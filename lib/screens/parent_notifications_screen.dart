@@ -15,11 +15,7 @@ class ParentNotificationsScreen extends StatelessWidget {
     final List<Map<String, dynamic>> feed = [];
 
     try {
-      // 1. Fetch child ID and Level
-      final studentRes = await supabase.from('profiles').select('id, level').eq('username', childName).single();
-      final String studentId = studentRes['id'];
-      final String level = studentRes['level'] ?? 'Standard 7';
-      // 1. Fetch child ID, Level and Full Name
+      // 1. Fetch child ID, level, and full name
       final studentRes = await supabase.from('profiles').select('id, level, full_name').eq('username', childName).single();
       final String studentId = studentRes['id'];
       final String level = studentRes['level'] ?? 'Standard 7';
@@ -35,7 +31,6 @@ class ParentNotificationsScreen extends StatelessWidget {
         feed.add({
           'type': 'grade',
           'title': 'Homework Graded',
-          'body': '$childName scored ${(r['score'] as num).toInt()}% in ${r['submissions']['homework']['title']}',
           'body': '$studentLabel scored ${(r['score'] as num).toInt()}% in ${r['submissions']['homework']['title']}',
           'date': DateTime.parse(r['created_at']),
           'icon': Icons.grade,

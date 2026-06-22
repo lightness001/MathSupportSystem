@@ -1,0 +1,17 @@
+﻿Analyzing confirm_questions_screen.dart...                      
+
+  error - The method 'performOcr' isn't defined for the type 'AutoGradingService' - lib\screens\confirm_questions_screen.dart:50:44 - undefined_method
+  error - The name 'debugPrint' is defined in the libraries 'package:flutter/src/foundation/print.dart (via package:flutter/material.dart)' and 'package:homework_support_system/services/auto_grading_service.dart' - lib\screens\confirm_questions_screen.dart:51:9 - ambiguous_import
+  error - The method 'extractQuestionsFromDescription' isn't defined for the type 'AutoGradingService' - lib\screens\confirm_questions_screen.dart:59:44 - undefined_method
+  error - The method 'extractQuestionsFromDescription' isn't defined for the type 'AutoGradingService' - lib\screens\confirm_questions_screen.dart:64:44 - undefined_method
+  error - The name 'debugPrint' is defined in the libraries 'package:flutter/src/foundation/print.dart (via package:flutter/material.dart)' and 'package:homework_support_system/services/auto_grading_service.dart' - lib\screens\confirm_questions_screen.dart:102:7 - ambiguous_import
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\confirm_questions_screen.dart:387:45 - deprecated_member_use
+
+flutter : 6 issues found. (ran in 4.0s)
+At line:1 char:1
++ flutter analyze lib/screens/confirm_questions_screen.dart --no-pub >  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (6 issues found. (ran in 4.0s):Str 
+   ing) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
