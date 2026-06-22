@@ -255,6 +255,10 @@ class _ParentSchoolsScreenState extends State<ParentSchoolsScreen> {
 
         final String displayName = usernameToFullName[username.trim().toLowerCase()] ??
             (username.isNotEmpty ? username[0].toUpperCase() + username.substring(1) : 'Student');
+        final String resolvedFullName = usernameToFullName[username.trim().toLowerCase()] ?? '';
+        final String displayName = resolvedFullName.isNotEmpty
+            ? '$resolvedFullName ($username)'
+            : (username.isNotEmpty ? username[0].toUpperCase() + username.substring(1) : 'Student');
 
         groupedSchools[school]!.add({
           'name': displayName,
@@ -555,6 +559,7 @@ class _ParentSchoolsScreenState extends State<ParentSchoolsScreen> {
                 const SizedBox(height: 15),
                 DropdownButtonFormField<String>(
                   initialValue: selectedSchool,
+                  value: selectedSchool,
                   decoration: InputDecoration(
                     labelText: _t("School Name", "Jina la Shule"),
                     prefixIcon: const Icon(Icons.school_outlined),

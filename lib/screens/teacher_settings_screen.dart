@@ -494,6 +494,7 @@ class _TeacherSettingsScreenState extends State<TeacherSettingsScreen> {
                         // Homework Alerts Switch
                         SwitchListTile(
                           activeThumbColor: primaryBlue,
+                          activeColor: primaryBlue,
                           secondary: const Icon(Icons.add_alert_outlined, color: primaryBlue),
                           title: const Text("Homework Alerts", style: TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: const Text("Get notifications when students submit"),
@@ -507,6 +508,7 @@ class _TeacherSettingsScreenState extends State<TeacherSettingsScreen> {
                         // Feedback Notifications Switch
                         SwitchListTile(
                           activeThumbColor: primaryBlue,
+                          activeColor: primaryBlue,
                           secondary: const Icon(Icons.feedback_outlined, color: primaryBlue),
                           title: const Text("Feedback Alerts", style: TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: const Text("Notifications for system auto-grading"),
@@ -520,6 +522,7 @@ class _TeacherSettingsScreenState extends State<TeacherSettingsScreen> {
                         // Reminders Switch
                         SwitchListTile(
                           activeThumbColor: primaryBlue,
+                          activeColor: primaryBlue,
                           secondary: const Icon(Icons.alarm, color: primaryBlue),
                           title: const Text("System Reminders", style: TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: const Text("Reminders for review deadlines"),
@@ -533,6 +536,7 @@ class _TeacherSettingsScreenState extends State<TeacherSettingsScreen> {
                         // Dark Mode Toggle
                         SwitchListTile(
                           activeThumbColor: primaryBlue,
+                          activeColor: primaryBlue,
                           secondary: const Icon(Icons.dark_mode_outlined, color: primaryBlue),
                           title: const Text("Dark Theme", style: TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: const Text("Optional dark styling for teacher portal"),
@@ -636,6 +640,7 @@ class _TeacherSettingsScreenState extends State<TeacherSettingsScreen> {
                             children: const [
                               Icon(Icons.wifi_off_outlined, color: Colors.green, size: 28),
                               SizedBox(width: 14),
+                              const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -645,6 +650,7 @@ class _TeacherSettingsScreenState extends State<TeacherSettingsScreen> {
                                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                                     ),
                                     SizedBox(height: 2),
+                                    const SizedBox(height: 2),
                                     Text(
                                       "Data safely cached locally on your device",
                                       style: TextStyle(color: Colors.grey, fontSize: 13),

@@ -541,6 +541,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                         // Homework Alerts Switch
                         SwitchListTile(
                           activeThumbColor: primaryBlue,
+                          activeColor: primaryBlue,
                           secondary: const Icon(Icons.add_alert_outlined, color: primaryBlue),
                           title: Text(_t("Homework Alerts", "Tahadhari za Kazi"), style: const TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: Text(_t("Notifications for new student assignments", "Arifa za kazi mpya za mwanafunzi")),
@@ -554,6 +555,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                         // Feedback Notifications Switch
                         SwitchListTile(
                           activeThumbColor: primaryBlue,
+                          activeColor: primaryBlue,
                           secondary: const Icon(Icons.feedback_outlined, color: primaryBlue),
                           title: Text(_t("Feedback Alerts", "Tahadhari za Maoni"), style: const TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: Text(_t("Notifications for teacher assessments", "Arifa za tathmini za mwalimu")),
@@ -567,6 +569,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                         // Reminders Switch
                         SwitchListTile(
                           activeThumbColor: primaryBlue,
+                          activeColor: primaryBlue,
                           secondary: const Icon(Icons.alarm, color: primaryBlue),
                           title: Text(_t("System Reminders", "Vikumbusho vya Mfumo"), style: const TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: Text(_t("Reminders for homework due dates", "Vikumbusho vya tarehe za mwisho za kazi")),
@@ -580,6 +583,7 @@ class _ParentSettingsScreenState extends State<ParentSettingsScreen> {
                         // Dark Mode Toggle
                         SwitchListTile(
                           activeThumbColor: primaryBlue,
+                          activeColor: primaryBlue,
                           secondary: const Icon(Icons.dark_mode_outlined, color: primaryBlue),
                           title: Text(_t("Dark Theme", "Mandhari Meusi"), style: const TextStyle(fontWeight: FontWeight.w600)),
                           subtitle: Text(_t("Optional dark styling for parent portal", "Mtindo wa hiari wa giza wa tovuti ya wazazi")),

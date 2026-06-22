@@ -115,11 +115,18 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
 
         final String hwLevel = hw['level'] ?? 'Standard 7';
         final levelStudentsRes = await supabase.from('profiles').select('id, username').ilike('role', 'student').eq('level', hwLevel).eq('status', 'active');
+        final levelStudentsRes = await supabase.from('profiles').select('id, username, full_name').ilike('role', 'student').eq('level', hwLevel).eq('status', 'active');
         
         for (var student in (levelStudentsRes as List)) {
           bool submitted = subList.any((s) => s['student_id'].toString() == student['id'].toString() && s['homework_id'].toString() == hw['id'].toString());
           if (!submitted) {
             missingWork.add({'student': student['username'] ?? 'Anonymous', 'homework': hw['title'] ?? 'Assignment', 'level': hwLevel});
+            final String stdName = student['full_name'] ?? '';
+            final String stdUsername = student['username'] ?? '';
+            final String stdLabel = (stdName.isNotEmpty && stdName != stdUsername)
+                ? "$stdName ($stdUsername)"
+                : stdUsername;
+            missingWork.add({'student': stdLabel, 'homework': hw['title'] ?? 'Assignment', 'level': hwLevel});
           }
         }
       }
@@ -273,6 +280,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                             trailing: const Text("PENDING", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10)),
                           ),
                         )),
+                        )).toList(),
                       const SizedBox(height: 50),
                     ],
                   ),

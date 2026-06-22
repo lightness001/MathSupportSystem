@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'crop_image_screen.dart';
+import 'confirm_questions_screen.dart';
 import '../services/web_safe_file.dart';
 
 class TeacherUploadHomeworkSheet extends StatefulWidget {
@@ -20,6 +21,7 @@ class _TeacherUploadHomeworkSheetState extends State<TeacherUploadHomeworkSheet>
   final supabase = Supabase.instance.client;
   bool _isLoading = true;
   final bool _isUploading = false;
+  bool _isUploading = false;
   Map<String, dynamic>? _lastHomework;
 
   final _titleController = TextEditingController();
@@ -143,6 +145,7 @@ class _TeacherUploadHomeworkSheetState extends State<TeacherUploadHomeworkSheet>
 
   void _showPostDialog(File file, {required bool isImage}) {
     DateTime selectedDueDate = DateTime.now().add(const Duration(days: 7));
+    DateTime selectedDueDate = DateTime.now();
     bool isUploadingLocal = false;
     String? errorMessage;
     showDialog(
@@ -179,6 +182,7 @@ class _TeacherUploadHomeworkSheetState extends State<TeacherUploadHomeworkSheet>
                   ),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedLevel,
+                  value: _selectedLevel,
                   items: widget.myClasses.map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
                   onChanged: (val) => setDialogState(() => _selectedLevel = val),
                   decoration: const InputDecoration(labelText: "Target Level"),
@@ -201,6 +205,13 @@ class _TeacherUploadHomeworkSheetState extends State<TeacherUploadHomeworkSheet>
                       initialDate: selectedDueDate,
                       firstDate: DateTime.now(),
                       lastDate: DateTime.now().add(const Duration(days: 365)),
+                    final DateTime now = DateTime.now();
+                    final DateTime? picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: selectedDueDate,
+                      firstDate: now.subtract(const Duration(days: 1)),
+                      lastDate: now.add(const Duration(days: 365)),
+                      currentDate: now,
                     );
                     if (picked != null) {
                       setDialogState(() {
@@ -310,6 +321,29 @@ class _TeacherUploadHomeworkSheetState extends State<TeacherUploadHomeworkSheet>
                     _fetchLastHomework();
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Homework posted!")));
+                    if (!ctx.mounted) return;
+                    Navigator.pop(ctx); // Close the upload dialog
+
+                    final success = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ConfirmQuestionsScreen(
+                          file: file,
+                          isImage: isImage,
+                          fileUrl: fileUrl,
+                          title: _titleController.text.trim(),
+                          description: _descController.text.trim(),
+                          level: _selectedLevel!,
+                          dueDate: selectedDueDate,
+                        ),
+                      ),
+                    );
+
+                    _titleController.clear();
+                    _descController.clear();
+
+                    if (success == true) {
+                      _fetchLastHomework();
                     }
                   } catch (e) {
                     debugPrint("Upload error details: $e");

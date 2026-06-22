@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' hide File, Directory;
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';

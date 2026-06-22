@@ -155,7 +155,7 @@ class _HomeworkPlayerScreenState extends State<HomeworkPlayerScreen>
     }
 
     final hasFile = widget.homework.fileUrl != null && widget.homework.fileUrl!.isNotEmpty;
-    final fileName = _submissionFile?.path.split(RegExp(r"[/\\]")).last;
+    final fileName = _submissionFile != null ? _submissionFile!.path.split(RegExp(r"[/\\]")).last : null;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FA),
@@ -404,63 +404,88 @@ class _HomeworkPlayerScreenState extends State<HomeworkPlayerScreen>
                     });
 
                     // Call the AI Auto-Marking Engine
-                    final gradingResult = await AutoGradingService.gradeSubmission(
-                      homeworkTitle: widget.homework.title,
-                      homeworkDescription: widget.homework.description ?? '',
-                      studentTextAnswer: _submissionTextController.text.trim(),
-                      localFile: _submissionFile,
-                      teacherFileUrl: widget.homework.fileUrl,
-                      templateQuestions: widget.homework.questions,
-                    );
-
-                    // Upsert the result into the Supabase results table to overwrite old scores cleanly
-                    await supabase.from('results').upsert({
-                      'submission_id': submissionData['id'].toString(),
-                      'score': gradingResult.score,
-                      'feedback': gradingResult.feedback,
-                    }, onConflict: 'submission_id');
-
-                    // Evaluate matching assessment details (Grade letter, colors)
-                    final int calcCorrect = gradingResult.correctCount ?? gradingResult.score.toInt();
-                    final int calcTotal = gradingResult.totalQuestions ?? 100;
-                    
-                    final evaluated = AssessmentEngine.evaluate(
-                      correctCount: calcCorrect,
-                      totalQuestions: calcTotal,
-                      topic: widget.homework.title,
-                      wrongIndexes: [],
-                    );
-
-                    final parsed = AutoGradingService.parseFeedback(gradingResult.feedback);
-
-                    final result = AssessmentResult(
-                      percent: gradingResult.score,
-                      grade: evaluated.grade,
-                      label: evaluated.label,
-                      feedback: parsed.feedback,
-                      recommendation: parsed.recommendation.isNotEmpty 
-                          ? parsed.recommendation 
-                          : evaluated.recommendation,
-                      gradeColor: evaluated.gradeColor,
-                      wrongQuestionIndexes: [],
-                      correctCount: gradingResult.correctCount,
-                      totalQuestions: gradingResult.totalQuestions,
-                      revisionQuestions: parsed.revisionQuestions,
-                    );
+                    AutoGradingResult? gradingResult;
+                    try {
+                      gradingResult = await AutoGradingService.gradeSubmission(
+                        homeworkTitle: widget.homework.title,
+                        homeworkDescription: widget.homework.description ?? '',
+                        studentTextAnswer: _submissionTextController.text.trim(),
+                        localFile: _submissionFile,
+                        teacherFileUrl: widget.homework.fileUrl,
+                        templateQuestions: widget.homework.questions,
+                      );
+                    } catch (gradingErr) {
+                      debugPrint("[Submit] Auto-grading failed: $gradingErr. Falling back to manual teacher review.");
+                    }
 
                     if (mounted) {
                       setState(() {
                         _isSubmittingDoc = false;
                         _alreadySubmitted = true;
                       });
-                      _showResultDialog(result);
+
+                      if (gradingResult == null) {
+                        // Show a clean "submitted — awaiting teacher review" dialog
+                        _showPendingReviewDialog(
+                          "Your submission has been received successfully. Since the auto-grading system was offline, your teacher will review and grade your mathematics work shortly.",
+                        );
+                      } else {
+                        // -1 score = pending teacher review (AI could not grade)
+                        // Don't save a misleading score — save null/0 and show pending UI
+                        final bool isPending = gradingResult.score < 0;
+
+                        await supabase.from('results').upsert({
+                          'submission_id': submissionData['id'].toString(),
+                          'score': isPending ? 0 : gradingResult.score,
+                          'feedback': gradingResult.feedback,
+                        }, onConflict: 'submission_id');
+
+                        if (isPending) {
+                          _showPendingReviewDialog(
+                            AutoGradingService.parseFeedback(gradingResult.feedback).feedback,
+                          );
+                        } else {
+                          // Normal graded result
+                          final int calcCorrect = gradingResult.correctCount ?? gradingResult.score.toInt();
+                          final int calcTotal = gradingResult.totalQuestions ?? 100;
+
+                          final evaluated = AssessmentEngine.evaluate(
+                            correctCount: calcCorrect,
+                            totalQuestions: calcTotal,
+                            topic: widget.homework.title,
+                            wrongIndexes: [],
+                          );
+
+                          final parsed = AutoGradingService.parseFeedback(gradingResult.feedback);
+
+                          final result = AssessmentResult(
+                            percent: gradingResult.score,
+                            grade: evaluated.grade,
+                            label: evaluated.label,
+                            feedback: parsed.feedback,
+                            recommendation: parsed.recommendation.isNotEmpty
+                                ? parsed.recommendation
+                                : evaluated.recommendation,
+                            gradeColor: evaluated.gradeColor,
+                            wrongQuestionIndexes: [],
+                            correctCount: gradingResult.correctCount,
+                            totalQuestions: gradingResult.totalQuestions,
+                            revisionQuestions: parsed.revisionQuestions,
+                          );
+
+                          _showResultDialog(result);
+                        }
+                      }
                     }
                   } catch (e) {
-                    debugPrint("Doc Submission & Grading Error: $e");
+                    debugPrint("Doc Submission Error: $e");
                     if (mounted) {
                       setState(() => _isSubmittingDoc = false);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Error submitting or grading assignment: $e"), backgroundColor: Colors.red),
+                        SnackBar(
+                          content: Text("Error submitting assignment: $e"),
+                          backgroundColor: Colors.red,
+                        ),
                       );
                     }
                   }
@@ -535,6 +560,7 @@ class _HomeworkPlayerScreenState extends State<HomeworkPlayerScreen>
       totalQuestions: total,
       topic: topic,
       wrongIndexes: _wrongIndexes,
+      questions: widget.homework.questions,
     );
 
     try {
@@ -576,6 +602,207 @@ class _HomeworkPlayerScreenState extends State<HomeworkPlayerScreen>
         });
       }
     }
+  }
+
+  // ── Pending review dialog (shown when AI cannot grade) ──────────
+
+  void _showPendingReviewDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1565C0),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.assignment_turned_in, color: Colors.white, size: 40),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Submitted Successfully!',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE3F2FD),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF90CAF9)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline, color: Color(0xFF1565C0), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        message.isNotEmpty
+                            ? message
+                            : 'Your submission has been received. Your teacher will review and mark it shortly.',
+                        style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1565C0),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text(
+                    'Back to Dashboard',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── No internet dialog ──────────────────────────────────────────
+
+  void _showNoInternetDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade700,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 40),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'No Internet Connection',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.orange, size: 16),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Your answers were not saved because grading requires an internet connection.',
+                            style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'This app automatically grades Mathematics homework using AI, which requires a working internet connection.',
+                      style: TextStyle(fontSize: 12, color: Colors.black54, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.tips_and_updates_outlined, color: Colors.blue, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Please connect to Wi-Fi or mobile data, then tap Retry.',
+                        style: TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: const BorderSide(color: Colors.grey),
+                      ),
+                      child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        // The submit button is already re-enabled (alreadySubmitted=false)
+                        // so the student can tap it again immediately.
+                      },
+                      icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 18),
+                      label: const Text('Got it — I\'ll Retry', style: TextStyle(color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange.shade700,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ── Result dialog ───────────────────────────────────────────────────
@@ -705,7 +932,7 @@ class _HomeworkPlayerScreenState extends State<HomeworkPlayerScreen>
                             ),
                           ],
                         ),
-                      )),
+                      )).toList(),
                     ],
                   ),
                 ),
@@ -856,7 +1083,7 @@ class _HomeworkPlayerScreenState extends State<HomeworkPlayerScreen>
                 // Animated progress bar
                 AnimatedBuilder(
                   animation: _progressAnim,
-                  builder: (_, _) => ClipRRect(
+                  builder: (_, __) => ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: LinearProgressIndicator(
                       value: _progressAnim.value,
@@ -962,9 +1189,8 @@ class _HomeworkPlayerScreenState extends State<HomeworkPlayerScreen>
                   TextField(
                     controller: _textController,
                     onChanged: (_) {
-                      if (_errorText != null) {
+                      if (_errorText != null)
                         setState(() => _errorText = null);
-                      }
                     },
                     decoration: InputDecoration(
                       labelText: 'Type your answer here',

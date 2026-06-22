@@ -164,6 +164,15 @@ class _ParentDashboardState extends State<ParentDashboard> {
     return match['school']!;
   }
 
+  // Helper to find the full name of the currently selected child
+  String _getCurrentFullName() {
+    final match = _linkedChildrenData.firstWhere(
+      (child) => child['username'] == _selectedChild,
+      orElse: () => {'fullName': _selectedChild},
+    );
+    return match['fullName']!;
+  }
+
   List<Widget> get _screens => [
     ParentHomeScreen(
       childName: _selectedChild,
@@ -173,6 +182,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
         ? const Center(child: Text("No children linked yet."))
         : ParentProgressScreen(
             childName: _selectedChild,
+            fullName: _getCurrentFullName(),
             level: _getCurrentLevel(),
           ),
     ParentNotificationsScreen(childName: _selectedChild),
@@ -257,6 +267,13 @@ class _ParentDashboardState extends State<ParentDashboard> {
                                     alignment: Alignment.centerLeft,
                                     child: Text(
                                       child['fullName'] ?? child['username'] ?? '',
+                                  final String uname = child['username'] ?? '';
+                                  final String fn = child['fullName'] ?? '';
+                                  final String disp = (fn.isNotEmpty && fn != uname) ? "$fn ($uname)" : uname;
+                                  return Container(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      disp,
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
@@ -272,6 +289,13 @@ class _ParentDashboardState extends State<ParentDashboard> {
                                   value: child['username'],
                                   child: Text(
                                     "${child['fullName'] ?? child['username']} (${child['school']})",
+                                final String uname = child['username'] ?? '';
+                                final String fn = child['fullName'] ?? '';
+                                final String disp = (fn.isNotEmpty && fn != uname) ? "$fn ($uname)" : uname;
+                                return DropdownMenuItem<String>(
+                                  value: child['username'],
+                                  child: Text(
+                                    "$disp (${child['school']})",
                                     style: const TextStyle(color: Colors.white, fontSize: 13),
                                   ),
                                 );
@@ -404,6 +428,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
                 const SizedBox(height: 15),
                 DropdownButtonFormField<String>(
                   initialValue: selectedSchool,
+                  value: selectedSchool,
                   decoration: InputDecoration(
                     labelText: _t("School Name", "Jina la Shule"),
                     prefixIcon: const Icon(Icons.school_outlined),

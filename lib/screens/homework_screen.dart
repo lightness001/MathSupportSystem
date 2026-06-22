@@ -68,14 +68,7 @@ class _HomeworkScreenState extends State<HomeworkScreen> {
             final List<dynamic> submissionData = snapshot.data![1];
             final List<dynamic> resultsData = snapshot.data![2];
 
-            // A submission is only fully completed if it has a graded result
-            final resultSubmissionIds = resultsData
-                .map((r) => r['submission_id']?.toString())
-                .where((id) => id != null)
-                .toSet();
-
             final completedIds = submissionData
-                .where((s) => resultSubmissionIds.contains(s['id']?.toString()))
                 .map((s) => s['homework_id']?.toString())
                 .where((id) => id != null)
                 .toList();

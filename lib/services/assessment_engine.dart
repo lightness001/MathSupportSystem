@@ -48,6 +48,7 @@ class AssessmentEngine {
     required int totalQuestions,
     required String topic,
     required List<int> wrongIndexes,
+    List<dynamic>? questions,
     int attemptNumber = 1,
   }) {
     if (totalQuestions == 0) {
@@ -64,6 +65,7 @@ class AssessmentEngine {
 
     final double percent = (correctCount / totalQuestions) * 100;
     return _applyRules(percent, topic, wrongIndexes, attemptNumber);
+    return _applyRules(percent, topic, wrongIndexes, questions, attemptNumber);
   }
 
   // -----------------------------------------------------------
@@ -73,11 +75,41 @@ class AssessmentEngine {
     double percent,
     String topic,
     List<int> wrongIndexes,
+    List<dynamic>? questions,
     int attempt,
   ) {
     final String topicAdvice = _topicAdvice(topic);
     final String repeatNote =
         attempt > 1 ? ' This is attempt #$attempt – you are improving!' : '';
+
+    String? getCorrectAnswer(dynamic q) {
+      if (q == null) return null;
+      if (q is Map) {
+        return q['correct_answer']?.toString();
+      }
+      try {
+        return q.correctAnswer;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    String missedFeedback = "";
+    if (questions != null && wrongIndexes.isNotEmpty) {
+      final List<String> missedDetails = [];
+      for (var idx in wrongIndexes) {
+        if (idx >= 0 && idx < questions.length) {
+          final q = questions[idx];
+          final String? ans = getCorrectAnswer(q);
+          if (ans != null) {
+            missedDetails.add("qn${idx + 1} = $ans");
+          }
+        }
+      }
+      if (missedDetails.isNotEmpty) {
+        missedFeedback = " Review answers for missed question(s): ${missedDetails.join(', ')}.";
+      }
+    }
 
     if (percent >= 90) {
       return AssessmentResult(
@@ -85,6 +117,7 @@ class AssessmentEngine {
         grade: 'A',
         label: 'Distinction',
         feedback: 'Outstanding work! 🌟$repeatNote',
+        feedback: 'Outstanding work! 🌟$repeatNote$missedFeedback',
         recommendation:
             'Excellent performance on $topic. Challenge yourself with '
             'the advanced homework set or help a classmate.',
@@ -97,6 +130,7 @@ class AssessmentEngine {
         grade: 'B',
         label: 'Merit',
         feedback: 'Great job! Almost there.$repeatNote',
+        feedback: 'Great job! Almost there.$repeatNote$missedFeedback',
         recommendation:
             'Good work on $topic. Review the ${wrongIndexes.length} '
             'question(s) you missed and you will be ready for an A.',
@@ -109,6 +143,7 @@ class AssessmentEngine {
         grade: 'C',
         label: 'Pass',
         feedback: 'You passed! Keep building on this.$repeatNote',
+        feedback: 'You passed! Keep building on this.$repeatNote$missedFeedback',
         recommendation:
             'You passed $topic. Redo the missed questions once more '
             'and review: $topicAdvice',
@@ -121,6 +156,7 @@ class AssessmentEngine {
         grade: 'D',
         label: 'Needs Improvement',
         feedback: 'Keep trying! You can do better.$repeatNote',
+        feedback: 'Keep trying! You can do better.$repeatNote$missedFeedback',
         recommendation:
             'Focus on $topic before retrying. Specifically: $topicAdvice. '
             'Ask your teacher for the revision notes.',
@@ -133,6 +169,7 @@ class AssessmentEngine {
         grade: 'E',
         label: 'Unsatisfactory',
         feedback: "Don't give up! Let's start from the basics.$repeatNote",
+        feedback: "Don't give up! Let's start from the basics.$repeatNote$missedFeedback",
         recommendation:
             'Please see your teacher about $topic. '
             'Begin with: $topicAdvice before attempting again.',

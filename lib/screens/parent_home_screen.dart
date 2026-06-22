@@ -104,6 +104,10 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             children: [
               const Text("Hello Parent,", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               Text("Overview for $displayName (${widget.level})", style: const TextStyle(fontSize: 14, color: Colors.grey)),
+              Text(
+                "Overview for $displayName ${displayName != widget.childName ? '(${widget.childName})' : ''} (${widget.level})",
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
+              ),
               const SizedBox(height: 25),
 
               // DYNAMIC STAT CARDS
@@ -129,6 +133,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                     subtitle: const Text("Your child hasn't finished this yet."),
                   ),
                 )),
+                )).toList(),
                 const SizedBox(height: 30),
               ],
 
@@ -163,6 +168,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                     ),
                   ),
                 )),
+                )).toList(),
               
               const SizedBox(height: 40),
             ],
@@ -371,6 +377,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                       ],
                     ),
                   )),
+                  )).toList(),
                   const SizedBox(height: 20),
                 ],
 

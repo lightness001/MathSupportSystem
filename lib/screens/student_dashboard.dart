@@ -197,11 +197,16 @@ class _StudentDashboardState extends State<StudentDashboard> {
     const Color accentOrange = Color(0xFFE65100);
 
     final List<Widget> screens = [
+    final List<Widget> _screens = [
       _buildMainDashboard(primaryBlue, accentOrange),
       HomeworkScreen(studentLevel: widget.studentLevel),
       const ResultsScreen(),
       StudentSettingsScreen(studentLevel: widget.studentLevel),
       MathQuizScreen(onQuit: () => setState(() => _currentIndex = 0)), // Sub-screen Index 4
+      MathQuizScreen(
+        studentLevel: widget.studentLevel,
+        onQuit: () => setState(() => _currentIndex = 0),
+      ), // Sub-screen Index 4
     ];
 
     final appBarTitles = [
@@ -278,6 +283,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                     ],
             ),
             body: screens[_currentIndex],
+            body: _screens[_currentIndex],
             bottomNavigationBar: Container(
               decoration: const BoxDecoration(
                 boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 1)],

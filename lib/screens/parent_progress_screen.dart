@@ -10,6 +10,15 @@ class ParentProgressScreen extends StatelessWidget {
   final String level;
 
   const ParentProgressScreen({super.key, required this.childName, required this.level});
+  final String fullName;
+  final String level;
+
+  const ParentProgressScreen({
+    super.key,
+    required this.childName,
+    required this.fullName,
+    required this.level,
+  });
 
   Future<List<Map<String, dynamic>>> _fetchLiveProgress() async {
     final supabase = Supabase.instance.client;
@@ -42,6 +51,10 @@ class ParentProgressScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("$childName's Progress", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              Text(
+                "${(fullName.isNotEmpty && fullName != childName) ? '$fullName ($childName)' : childName}'s Progress",
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
               Text("Detailed analysis for $level", style: const TextStyle(color: Colors.grey, fontSize: 14)),
               const SizedBox(height: 25),
 
@@ -339,6 +352,7 @@ class ParentProgressScreen extends StatelessWidget {
                       ],
                     ),
                   )),
+                  )).toList(),
                   const SizedBox(height: 20),
                 ],
 

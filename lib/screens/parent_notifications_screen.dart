@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import '../services/assessment_engine.dart';
 
 class ParentNotificationsScreen extends StatelessWidget {
   final String childName;
@@ -18,6 +19,12 @@ class ParentNotificationsScreen extends StatelessWidget {
       final studentRes = await supabase.from('profiles').select('id, level').eq('username', childName).single();
       final String studentId = studentRes['id'];
       final String level = studentRes['level'] ?? 'Standard 7';
+      // 1. Fetch child ID, Level and Full Name
+      final studentRes = await supabase.from('profiles').select('id, level, full_name').eq('username', childName).single();
+      final String studentId = studentRes['id'];
+      final String level = studentRes['level'] ?? 'Standard 7';
+      final String fullName = studentRes['full_name'] ?? childName;
+      final String studentLabel = fullName.isNotEmpty && fullName != childName ? '$fullName ($childName)' : childName;
 
       // 2. Fetch Recent Graded Results
       final resultsRes = await supabase.from('results').select('''
@@ -29,6 +36,7 @@ class ParentNotificationsScreen extends StatelessWidget {
           'type': 'grade',
           'title': 'Homework Graded',
           'body': '$childName scored ${(r['score'] as num).toInt()}% in ${r['submissions']['homework']['title']}',
+          'body': '$studentLabel scored ${(r['score'] as num).toInt()}% in ${r['submissions']['homework']['title']}',
           'date': DateTime.parse(r['created_at']),
           'icon': Icons.grade,
           'color': Colors.green,
