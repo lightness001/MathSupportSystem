@@ -214,13 +214,18 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
 
       if (await file.exists()) {
         final content = await file.readAsString();
-        if (content.isNotEmpty) {
+        if (content.contains("absent today") || content.contains("reading progress") || content.contains("Exam Schedule")) {
+          try {
+            await file.delete();
+          } catch (e) {
+            debugPrint("Error clearing mock cache: $e");
+          }
+        } else if (content.isNotEmpty) {
           data = jsonDecode(content);
         }
       }
       _purgeOldSeededChats(data);
 
-      bool dirty = false;
       final Map<String, dynamic> unreadCounts = data['unread_counts'] ?? {};
       final Map<String, dynamic> urgents = data['urgents'] ?? {};
 
@@ -303,10 +308,6 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       data['unread_counts'] = unreadCounts;
       data['urgents'] = urgents;
 
-      if (dirty) {
-        await file.writeAsString(jsonEncode(data));
-      }
-
       // Build unified conversations list
       final List<Map<String, dynamic>> conversations = [];
       
@@ -334,31 +335,28 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
         if (lastMsg['date'] != null) {
           sortTime = DateTime.parse(lastMsg['date']);
         List<dynamic> history = data[chatKey] ?? [];
-        String lastMsgText = "No messages yet";
-        String lastMsgTime = "";
-        DateTime sortTime = DateTime.fromMillisecondsSinceEpoch(0);
-
         if (history.isNotEmpty) {
           final lastMsg = history.last;
-          lastMsgText = lastMsg['imagePath'] != null ? "📷 Attachment" : (lastMsg['text'] ?? "");
-          lastMsgTime = lastMsg['time'] ?? "";
+          final String lastMsgText = lastMsg['imagePath'] != null ? "📷 Attachment" : (lastMsg['text'] ?? "");
+          final String lastMsgTime = lastMsg['time'] ?? "";
+          DateTime sortTime = DateTime.fromMillisecondsSinceEpoch(0);
           if (lastMsg['date'] != null) {
             sortTime = DateTime.parse(lastMsg['date']);
           }
+
+          final unreadCount = unreadCounts[chatKey] ?? 0;
+          final isUrgent = urgents[chatKey] ?? false;
+
+          conversations.add({
+            'teacher': teacher,
+            'chatKey': chatKey,
+            'lastMessage': lastMsgText,
+            'time': lastMsgTime,
+            'sortTime': sortTime,
+            'unreadCount': unreadCount,
+            'isUrgent': isUrgent,
+          });
         }
-
-        final unreadCount = unreadCounts[chatKey] ?? 0;
-        final isUrgent = urgents[chatKey] ?? false;
-
-        conversations.add({
-          'teacher': teacher,
-          'chatKey': chatKey,
-          'lastMessage': lastMsgText,
-          'time': lastMsgTime,
-          'sortTime': sortTime,
-          'unreadCount': unreadCount,
-          'isUrgent': isUrgent,
-        });
       }
 
       // Sort: urgent first, then by last message timestamp (most recent first)
@@ -427,7 +425,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    const Color primaryNavy = Color(0xFF0F2C59);
+    final Color primaryNavy = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF4F6F9),
@@ -554,7 +552,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
           // Conversation List
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(primaryNavy)))
+                ? Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(primaryNavy)))
                 : _filteredConversations.isEmpty
                     ? Center(
                         child: Text(
@@ -730,7 +728,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                                         if (unreadCount > 0)
                                           Container(
                                             padding: const EdgeInsets.all(6),
-                                            decoration: const BoxDecoration(
+                                            decoration: BoxDecoration(
                                               color: primaryNavy,
                                               shape: BoxShape.circle,
                                             ),
@@ -1014,18 +1012,44 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
       if (image == null) return;
       
       final now = DateTime.now();
-      setState(() {
-        _messages.add({
-          'sender': 'parent',
-          'senderName': 'You',
-          'imagePath': image.path,
-          'time': DateFormat.jm().format(now),
-          'date': now.toIso8601String(),
+      final newMsg = {
+        'sender': 'parent',
+        'senderName': 'You',
+        'imagePath': image.path,
+        'time': DateFormat.jm().format(now),
+        'date': now.toIso8601String(),
+      };
+
+      if (_useDatabase) {
+        try {
+          await Supabase.instance.client.from('messages').insert({
+            'chat_key': widget.chatKey,
+            'sender': 'parent',
+            'sender_name': 'You',
+            'text': "📷 Photo Attachment: ${image.name}",
+            'subject': '',
+            'priority': 'Normal',
+            'read': false,
+          });
+          setState(() {
+            _messages.add(newMsg);
+          });
+          _scrollToBottom();
+        } catch (e) {
+          debugPrint("Error saving image message to database: $e");
+          setState(() {
+            _messages.add(newMsg);
+          });
+          _scrollToBottom();
+          await _saveMessages();
+        }
+      } else {
+        setState(() {
+          _messages.add(newMsg);
         });
-      });
-      _scrollToBottom();
-      await _saveMessages();
-      _triggerDelayedResponse("Sent an image attachment.");
+        _scrollToBottom();
+        await _saveMessages();
+      }
     } catch (e) {
       debugPrint("Error picking image: $e");
     }
@@ -1038,18 +1062,44 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
 
       final filename = result.files.single.name;
       final now = DateTime.now();
-      setState(() {
-        _messages.add({
-          'sender': 'parent',
-          'senderName': 'You',
-          'text': "📎 File: $filename",
-          'time': DateFormat.jm().format(now),
-          'date': now.toIso8601String(),
+      final newMsg = {
+        'sender': 'parent',
+        'senderName': 'You',
+        'text': "📎 File: $filename",
+        'time': DateFormat.jm().format(now),
+        'date': now.toIso8601String(),
+      };
+
+      if (_useDatabase) {
+        try {
+          await Supabase.instance.client.from('messages').insert({
+            'chat_key': widget.chatKey,
+            'sender': 'parent',
+            'sender_name': 'You',
+            'text': "📎 File: $filename",
+            'subject': '',
+            'priority': 'Normal',
+            'read': false,
+          });
+          setState(() {
+            _messages.add(newMsg);
+          });
+          _scrollToBottom();
+        } catch (e) {
+          debugPrint("Error saving sent file to database: $e");
+          setState(() {
+            _messages.add(newMsg);
+          });
+          _scrollToBottom();
+          await _saveMessages();
+        }
+      } else {
+        setState(() {
+          _messages.add(newMsg);
         });
-      });
-      _scrollToBottom();
-      await _saveMessages();
-      _triggerDelayedResponse("Sent a document: $filename");
+        _scrollToBottom();
+        await _saveMessages();
+      }
     } catch (e) {
       debugPrint("Error picking file: $e");
     }
@@ -1183,7 +1233,7 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    const Color primaryNavy = Color(0xFF0F2C59);
+    final Color primaryNavy = Theme.of(context).colorScheme.primary;
     final String teacherName = widget.teacher['name'];
     final String teacherRole = widget.teacher['role'] ?? "Subject Teacher";
 
@@ -1195,6 +1245,7 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF4F6F9),
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: primaryNavy,
         elevation: 1,
@@ -1358,8 +1409,6 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
                   ),
           ),
           
-<<<<<<< HEAD
-=======
           if (_isTyping)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1372,7 +1421,6 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
               ),
             ),
             
->>>>>>> 565fb55eeb95720e88d7c7747d4b40e2c005391a
           // Quick replies chips
           Container(
             height: 40,
@@ -1396,54 +1444,55 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
             ),
           ),
           
-          // Bottom input bar
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
-            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-            child: Row(
-              children: [
-                // Attach file
-                IconButton(
-                  icon: const Icon(Icons.attach_file, color: Colors.grey),
-                  onPressed: _pickFile,
-                ),
-                // Camera
-                IconButton(
-                  icon: const Icon(Icons.camera_alt_outlined, color: Colors.grey),
-                  onPressed: _pickImage,
-                ),
-                // Document
-                IconButton(
-                  icon: const Icon(Icons.description_outlined, color: Colors.grey),
-                  onPressed: _pickFile,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      hintText: _t("Type a message...", "Andika ujumbe..."),
-                      filled: true,
-                      fillColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF1F3F5),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
+          SafeArea(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+              child: Row(
+                children: [
+                  // Attach file
+                  IconButton(
+                    icon: const Icon(Icons.attach_file, color: Colors.grey),
+                    onPressed: _pickFile,
+                  ),
+                  // Camera
+                  IconButton(
+                    icon: const Icon(Icons.camera_alt_outlined, color: Colors.grey),
+                    onPressed: _pickImage,
+                  ),
+                  // Document
+                  IconButton(
+                    icon: const Icon(Icons.description_outlined, color: Colors.grey),
+                    onPressed: _pickFile,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                        hintText: _t("Type a message...", "Andika ujumbe..."),
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF1F3F5),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                CircleAvatar(
-                  backgroundColor: primaryNavy,
-                  radius: 22,
-                  child: IconButton(
-                    icon: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
-                    onPressed: () => _sendMessage(),
-                  ),
-                )
-              ],
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    backgroundColor: primaryNavy,
+                    radius: 22,
+                    child: IconButton(
+                      icon: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                      onPressed: () => _sendMessage(),
+                    ),
+                  )
+                ],
+              ),
             ),
           )
         ],
@@ -1602,7 +1651,7 @@ class _ParentComposeMessageScreenState extends State<ParentComposeMessageScreen>
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    const Color primaryNavy = Color(0xFF0F2C59);
+    final Color primaryNavy = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
@@ -1610,12 +1659,12 @@ class _ParentComposeMessageScreenState extends State<ParentComposeMessageScreen>
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: primaryNavy),
+          icon: Icon(Icons.close, color: primaryNavy),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           _t("New Message", "Ujumbe Mpya"),
-          style: const TextStyle(color: primaryNavy, fontWeight: FontWeight.bold),
+          style: TextStyle(color: primaryNavy, fontWeight: FontWeight.bold),
         ),
         actions: [
           Padding(

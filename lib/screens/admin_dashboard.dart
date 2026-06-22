@@ -29,7 +29,7 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> with SingleTickerProviderStateMixin {
   // Supabase service role key — required for admin password resets via the Auth API.
-  static const _supabaseServiceRoleKey = 'supabase_service_key';
+  static const _supabaseServiceRoleKey = 'service';
   static const _supabaseUrl = 'https://wnxeohqejdiytqkxdcwe.supabase.co';
 
   late TabController _tabController;
@@ -2149,10 +2149,13 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                       });
                     },
                   ),
-                const SizedBox(height: 16),
                 TextField(
                   controller: _prePhoneController,
                   keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
                   decoration: const InputDecoration(
                     labelText: "Phone Number (Optional)",
                     prefixIcon: Icon(Icons.phone),
@@ -2201,10 +2204,17 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                 final String fullName = _preNameController.text.trim();
                 final String employeeNumber = _preEmployeeController.text.trim().toUpperCase();
                 final String phone = _prePhoneController.text.trim();
-                
+
                 if (fullName.isEmpty || employeeNumber.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("Please fill all fields."), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+
+                if (phone.isNotEmpty && (phone.length != 10 || !RegExp(r'^[0-9]+$').hasMatch(phone))) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Phone number must be exactly 10 digits and contain only numbers."), backgroundColor: Colors.red),
                   );
                   return;
                 }
