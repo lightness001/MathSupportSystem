@@ -77,19 +77,6 @@ class _ParentSchoolsScreenState extends State<ParentSchoolsScreen> {
           if (username.isNotEmpty) {
             debugPrint("DEBUG ParentSchoolsScreen: Syncing cached child '$username' with school '$school'...");
             try {
-              // Prevent duplicate linkage
-              final existingLink = await supabase
-                  .from('parent_child_links')
-                  .select()
-                  .eq('parent_id', user.id)
-                  .eq('student_username', username)
-                  .maybeSingle();
-
-              if (existingLink != null) {
-                debugPrint("DEBUG ParentSchoolsScreen: Child '$username' already linked, skipping sync.");
-                continue;
-              }
-
               await supabase.from('parent_child_links').insert({
                 'parent_id': user.id,
                 'student_username': username,
@@ -273,16 +260,10 @@ class _ParentSchoolsScreenState extends State<ParentSchoolsScreen> {
             ? '$resolvedFullName ($username)'
             : (username.isNotEmpty ? username[0].toUpperCase() + username.substring(1) : 'Student');
 
-        final String studentKey = username.trim().toLowerCase();
-        final bool isDuplicate = groupedSchools[school]!.any((c) => (c['username'] ?? '').toLowerCase() == studentKey);
-
-        if (!isDuplicate) {
-          groupedSchools[school]!.add({
-            'name': displayName,
-            'grade': gradeText,
-            'username': username,
-          });
-        }
+        groupedSchools[school]!.add({
+          'name': displayName,
+          'grade': gradeText,
+        });
       }
 
       setState(() {
@@ -643,27 +624,6 @@ class _ParentSchoolsScreenState extends State<ParentSchoolsScreen> {
                   }
 
                   final userId = supabase.auth.currentUser!.id;
-
-                  // Check if student is already linked to this parent
-                  final existingLink = await supabase
-                      .from('parent_child_links')
-                      .select()
-                      .eq('parent_id', userId)
-                      .eq('student_username', newChild)
-                      .maybeSingle();
-
-                  if (existingLink != null) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(_t("Student '$newChild' is already linked to your account.", "Mwanafunzi '$newChild' tayari ameunganishwa kwenye akaunti yako.")),
-                          backgroundColor: Colors.orange,
-                        ),
-                      );
-                    }
-                    setState(() => _isLoading = false);
-                    return;
-                  }
 
                   // 2. Try inserting child using actual level + school
                   try {

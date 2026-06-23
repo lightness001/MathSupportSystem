@@ -87,70 +87,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
     }
   }
 
-  void _showComposeSheet() {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color primaryNavy = Theme.of(context).colorScheme.primary;
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Wrap(
-            children: [
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFE8F5E9),
-                  child: Icon(Icons.chat_bubble_outline, color: Colors.green),
-                ),
-                title: Text(_t("Direct Message", "Ujumbe wa Moja kwa Moja")),
-                subtitle: Text(_t("Message a specific parent", "Mtumie ujumbe mzazi maalum")),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => TeacherComposeMessageScreen(
-                        myClasses: widget.myClasses,
-                        teacherId: _teacherId,
-                        teacherName: widget.teacherName,
-                      ),
-                    ),
-                  );
-                  if (result == true) {
-                    _loadData();
-                  }
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFE3F2FD),
-                  child: Icon(Icons.campaign_outlined, color: Colors.blue),
-                ),
-                title: Text(_t("Class Announcement", "Tangazo la Darasa")),
-                subtitle: Text(_t("Broadcast to all parents in a class", "Tangaza kwa wazazi wote wa darasa")),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const BroadcastMessageScreen(),
-                    ),
-                  );
-                  if (result == true) {
-                    _loadData();
-                  }
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     await _resolveTeacherSchool();
@@ -239,13 +175,7 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
 
       if (await file.exists()) {
         final content = await file.readAsString();
-        if (content.contains("absent today") || content.contains("reading progress") || content.contains("Exam Schedule")) {
-          try {
-            await file.delete();
-          } catch (e) {
-            debugPrint("Error clearing mock cache: $e");
-          }
-        } else if (content.isNotEmpty) {
+        if (content.isNotEmpty) {
           data = jsonDecode(content);
         }
       }
@@ -451,6 +381,47 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
           
           final String chatKey = "${student['username']}_$_teacherId";
           
+          // Seed conversation if not present
+          if (!data.containsKey(chatKey)) {
+            final now = DateTime.now();
+            if (i == 0) {
+              data[chatKey] = [
+                {
+                  'sender': 'parent',
+                  'senderName': parentName,
+                  'text': "Re: ${studentName}'s reading progress. Hi teacher, ${studentName} has been practicing reading every night. They are doing much better.",
+                  'time': "11:05 AM",
+                  'date': now.toIso8601String()
+                }
+              ];
+              teacherUnreadCounts[chatKey] = 1;
+            } else if (i == 1) {
+              data[chatKey] = [
+                {
+                  'sender': 'parent',
+                  'senderName': parentName,
+                  'text': "${studentName} missed school due to illness. They have a fever and we went to the clinic.",
+                  'time': "9:50 AM",
+                  'date': now.toIso8601String()
+                }
+              ];
+              teacherUnreadCounts[chatKey] = 1;
+              urgents[chatKey] = true;
+            } else {
+              data[chatKey] = [
+                {
+                  'sender': 'teacher',
+                  'senderName': widget.teacherName,
+                  'text': "Thank you for the feedback, $parentName! Let me know if ${studentName} needs help.",
+                  'time': "Yesterday",
+                  'date': now.subtract(const Duration(days: 1)).toIso8601String()
+                }
+              ];
+              teacherUnreadCounts[chatKey] = 0;
+            }
+            dirty = true;
+          }
+          
           resolvedParents.add({
             'studentName': studentName,
             'studentUser': student['username'],
@@ -564,31 +535,30 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
           sortTime = DateTime.parse(lastMsg['date']);
         if (history.isNotEmpty) {
           final lastMsg = history.last;
-          final String lastMsgText = lastMsg['imagePath'] != null ? "📷 Attachment" : (lastMsg['text'] ?? "");
-          final String lastMsgTime = lastMsg['time'] ?? "";
-          DateTime sortTime = DateTime.fromMillisecondsSinceEpoch(0);
+          lastMsgText = lastMsg['imagePath'] != null ? "📷 Attachment" : (lastMsg['text'] ?? "");
+          lastMsgTime = lastMsg['time'] ?? "";
           if (lastMsg['date'] != null) {
             sortTime = DateTime.parse(lastMsg['date']);
           }
-
-          final unreadCount = teacherUnreadCounts[chatKey] ?? 0;
-          final isUrgent = urgents[chatKey] ?? false;
-
-          parentConversationsList.add({
-            'studentName': parent['studentName'],
-            'studentUser': parent['studentUser'],
-            'parentName': parent['parentName'],
-            'avatar': parent['avatar'],
-            'level': parent['level'],
-            'status': parent['status'],
-            'chatKey': chatKey,
-            'lastMessage': lastMsgText,
-            'time': lastMsgTime,
-            'sortTime': sortTime,
-            'unreadCount': unreadCount,
-            'isUrgent': isUrgent,
-          });
         }
+
+        final unreadCount = teacherUnreadCounts[chatKey] ?? 0;
+        final isUrgent = urgents[chatKey] ?? false;
+
+        parentConversationsList.add({
+          'studentName': parent['studentName'],
+          'studentUser': parent['studentUser'],
+          'parentName': parent['parentName'],
+          'avatar': parent['avatar'],
+          'level': parent['level'],
+          'status': parent['status'],
+          'chatKey': chatKey,
+          'lastMessage': lastMsgText,
+          'time': lastMsgTime,
+          'sortTime': sortTime,
+          'unreadCount': unreadCount,
+          'isUrgent': isUrgent,
+        });
       }
 
       if (mounted) {
@@ -678,7 +648,7 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color primaryNavy = Theme.of(context).colorScheme.primary;
+    const Color primaryNavy = Color(0xFF0F2C59);
 
     return Scaffold(
       backgroundColor: isDark
@@ -768,8 +738,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                 _loadData();
               }
             },
-            tooltip: _t("New Message / Announcement", "Ujumbe Mpya / Tangazo"),
-            onPressed: _showComposeSheet,
           ),
         ],
       ),
@@ -858,7 +826,7 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
           
           Expanded(
             child: _isLoading
-                ? Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(primaryNavy)))
+                ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(primaryNavy)))
                 : ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     children: [
@@ -945,8 +913,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                       top: 0,
                                     backgroundColor: isDark ? Colors.grey[800] : const Color(0xFFE8ECEF),
                                     child: Text(parentMsg['avatar'] ?? 'P', style: const TextStyle(fontWeight: FontWeight.bold, color: primaryNavy)),
-                                    child: Text(parentMsg['avatar'] ?? 'P', style: TextStyle(fontWeight: FontWeight.bold, color: primaryNavy)),
-                                  ),
                                   if (isOnline)
                                     Positioned(
                                       right: 0,
@@ -1077,7 +1043,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                       ),
                                     ),
                                       decoration: const BoxDecoration(color: primaryNavy, shape: BoxShape.circle),
-                                      decoration: BoxDecoration(color: primaryNavy, shape: BoxShape.circle),
                                       child: Text('$unreadCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                                     )
                                 ],
@@ -1111,8 +1076,8 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                             margin: const EdgeInsets.only(bottom: 8),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: const Color(0xFFE3F2FD),
+                              leading: const CircleAvatar(
+                                backgroundColor: Color(0xFFE3F2FD),
                                 child: Icon(Icons.campaign_outlined, color: primaryNavy),
                               ),
                               title: Text(broadcast['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -1124,41 +1089,7 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                             ),
                           );
                         }).toList(),
-                      ],
-                      if (_filteredParentMessages.isEmpty && _filteredBroadcasts.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 80.0, left: 24.0, right: 24.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.forum_outlined, size: 80, color: Colors.grey.shade400),
-                              const SizedBox(height: 16),
-                              Text(
-                                _t("No Messages Yet", "Hakuna Ujumbe Bado"),
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _t("Start a conversation with a parent or broadcast a class announcement.", 
-                                   "Anza mazungumzo na mzazi au tangaza taarifa ya darasa."),
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                              ),
-                              const SizedBox(height: 24),
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: primaryNavy,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                ),
-                                icon: const Icon(Icons.add),
-                                label: Text(_t("Write a Message", "Andika Ujumbe")),
-                                onPressed: _showComposeSheet,
-                              ),
-                            ],
-                          ),
-                        ),
+                      ]
                     ],
                   ),
           ),
@@ -1277,7 +1208,7 @@ class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen>
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color primaryNavy = Theme.of(context).colorScheme.primary;
+    const Color primaryNavy = Color(0xFF0F2C59);
 
     final todayNotifs = _notifications.where((n) {
       final dateStr = n['date'];
@@ -1739,7 +1670,6 @@ class _BroadcastMessageScreenState extends State<BroadcastMessageScreen> {
               ),
             ],
     const Color primaryNavy = Color(0xFF0F2C59);
-    final Color primaryNavy = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
@@ -1747,12 +1677,12 @@ class _BroadcastMessageScreenState extends State<BroadcastMessageScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.close, color: primaryNavy),
+          icon: const Icon(Icons.close, color: primaryNavy),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           _t("Broadcast Message", "Tangazo"),
-          style: TextStyle(color: primaryNavy, fontWeight: FontWeight.bold),
+          style: const TextStyle(color: primaryNavy, fontWeight: FontWeight.bold),
         ),
       ),
       body: SingleChildScrollView(
@@ -1891,336 +1821,6 @@ class _BroadcastMessageScreenState extends State<BroadcastMessageScreen> {
           ],
         ),
       ),
-    );
-  }
-}
-
-
-// -----------------------------------------------------------------------------
-// TEACHER COMPOSE MESSAGE VIEW
-// -----------------------------------------------------------------------------
-class TeacherComposeMessageScreen extends StatefulWidget {
-  final List<String> myClasses;
-  final String teacherId;
-  final String teacherName;
-
-  const TeacherComposeMessageScreen({
-    super.key,
-    required this.myClasses,
-    required this.teacherId,
-    required this.teacherName,
-  });
-
-  @override
-  State<TeacherComposeMessageScreen> createState() => _TeacherComposeMessageScreenState();
-}
-
-class _TeacherComposeMessageScreenState extends State<TeacherComposeMessageScreen> {
-  final supabase = Supabase.instance.client;
-  final TextEditingController _messageController = TextEditingController();
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-  
-  bool _isLoading = true;
-  bool _showDropdown = false;
-  Map<String, dynamic>? _selectedParentLink;
-  
-  List<Map<String, dynamic>> _availableParents = [];
-  List<Map<String, dynamic>> _filteredParents = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAvailableParents();
-  }
-
-  @override
-  void dispose() {
-    _messageController.dispose();
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    super.dispose();
-  }
-
-  Future<File> get _chatHistoryFile async {
-    final directory = await AppSettings.getSafeDirectory();
-    return File('${directory.path}/parent_chats_config.json');
-  }
-
-  Future<void> _loadAvailableParents() async {
-    try {
-      final studentRes = await supabase.from('profiles').select('id, username, full_name, level, school').eq('role', 'student');
-      final studentProfiles = studentRes as List<dynamic>? ?? [];
-
-      final parentRes = await supabase.from('profiles').select('id, username, full_name, level, school').eq('role', 'parent');
-      final parentProfiles = parentRes as List<dynamic>? ?? [];
-
-      final linksRes = await supabase.from('parent_child_links').select('parent_id, student_username');
-      final dbLinks = linksRes as List<dynamic>? ?? [];
-
-      final List<String> myClassesLower = widget.myClasses.map((c) => c.toLowerCase().trim()).toList();
-      final filteredStudents = studentProfiles.where((s) {
-        final String sLevel = (s['level'] ?? '').toString().toLowerCase().trim();
-        return myClassesLower.any((c) => sLevel.contains(c) || c.contains(sLevel));
-      }).toList();
-
-      final List<String> studentUsernames = filteredStudents.map((s) => s['username'].toString().toLowerCase().trim()).toList();
-
-      final List<Map<String, dynamic>> resolved = [];
-      
-      final List<dynamic> matchedLinks = dbLinks.where((link) {
-        final String sUsername = (link['student_username'] ?? '').toString().toLowerCase().trim();
-        return studentUsernames.contains(sUsername);
-      }).toList();
-
-      if (matchedLinks.isEmpty && parentProfiles.isNotEmpty && filteredStudents.isNotEmpty) {
-        for (int i = 0; i < min(parentProfiles.length, filteredStudents.length); i++) {
-          matchedLinks.add({
-            'parent_id': parentProfiles[i]['id'].toString(),
-            'student_username': filteredStudents[i]['username'].toString(),
-          });
-        }
-      }
-
-      for (var link in matchedLinks) {
-        final String studentUname = link['student_username'];
-        final String parentId = link['parent_id'];
-
-        final student = filteredStudents.firstWhere(
-          (s) => s['username'].toString().toLowerCase().trim() == studentUname.toLowerCase().trim(),
-          orElse: () => null,
-        );
-
-        final parent = parentProfiles.firstWhere(
-          (p) => p['id'].toString() == parentId,
-          orElse: () => null,
-        );
-
-        if (student != null && parent != null) {
-          final String studentName = student['full_name'] ?? student['username'] ?? 'Student';
-          final String parentName = parent['full_name'] ?? parent['username'] ?? 'Parent';
-          final String chatKey = "${student['username']}_${widget.teacherId}";
-
-          resolved.add({
-            'parentId': parentId,
-            'parentName': parentName,
-            'studentName': studentName,
-            'studentUser': student['username'],
-            'level': student['level'] ?? 'Std 4A',
-            'chatKey': chatKey,
-          });
-        }
-      }
-
-      setState(() {
-        _availableParents = resolved;
-        _filteredParents = resolved;
-        _isLoading = false;
-      });
-    } catch (e) {
-      debugPrint("Error loading compose parents: $e");
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _filterParentsList(String query) {
-    if (query.trim().isEmpty) {
-      setState(() {
-        _filteredParents = _availableParents;
-      });
-    } else {
-      final q = query.toLowerCase().trim();
-      setState(() {
-        _filteredParents = _availableParents.where((p) {
-          final pName = p['parentName'].toString().toLowerCase();
-          final sName = p['studentName'].toString().toLowerCase();
-          return pName.contains(q) || sName.contains(q);
-        }).toList();
-      });
-    }
-  }
-
-  Future<void> _sendMessage() async {
-    if (_selectedParentLink == null || _messageController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select a parent and write a message.")),
-      );
-      return;
-    }
-
-    final chatKey = _selectedParentLink!['chatKey'];
-    final text = _messageController.text.trim();
-    final now = DateTime.now();
-
-    try {
-      await supabase.from('messages').insert({
-        'chat_key': chatKey,
-        'sender': 'teacher',
-        'sender_name': widget.teacherName,
-        'text': text,
-        'subject': '',
-        'priority': 'Normal',
-        'read': false,
-      });
-    } catch (e) {
-      debugPrint("Failed saving to Supabase in compose: $e");
-    }
-
-    try {
-      final file = await _chatHistoryFile;
-      Map<String, dynamic> data = {};
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        if (content.isNotEmpty) {
-          data = jsonDecode(content);
-        }
-      }
-
-      final List<dynamic> history = data[chatKey] ?? [];
-      history.add({
-        'sender': 'teacher',
-        'senderName': widget.teacherName,
-        'text': text,
-        'time': DateFormat.jm().format(now),
-        'date': now.toIso8601String(),
-      });
-      data[chatKey] = history;
-
-      final Map<String, dynamic> teacherUnread = data['teacher_unread_counts'] ?? {};
-      teacherUnread[chatKey] = 0;
-      data['teacher_unread_counts'] = teacherUnread;
-
-      final Map<String, dynamic> parentUnread = data['unread_counts'] ?? {};
-      parentUnread[chatKey] = (parentUnread[chatKey] ?? 0) + 1;
-      data['unread_counts'] = parentUnread;
-
-      await file.writeAsString(jsonEncode(data));
-    } catch (e) {
-      debugPrint("Failed saving locally in compose: $e");
-    }
-
-    if (mounted) {
-      Navigator.pop(context, true);
-    }
-  }
-
-  String _t(String en, String sw) {
-    return AppSettings.language.value == 'Kiswahili' ? sw : en;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color primaryNavy = Theme.of(context).colorScheme.primary;
-
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
-      appBar: AppBar(
-        backgroundColor: primaryNavy,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          _t("New Message", "Ujumbe Mpya"),
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12.0, top: 10, bottom: 10),
-            child: ElevatedButton(
-              onPressed: _sendMessage,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: primaryNavy,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: Text(_t("Send", "Tuma"), style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          )
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    onChanged: (val) {
-                      setState(() {
-                        _showDropdown = true;
-                      });
-                      _filterParentsList(val);
-                    },
-                    decoration: InputDecoration(
-                      labelText: _selectedParentLink != null
-                          ? "${_selectedParentLink!['parentName']} (${_selectedParentLink!['studentName']} · ${_selectedParentLink!['level']})"
-                          : _t("Select a parent...", "Mchague mzazi..."),
-                      labelStyle: TextStyle(
-                        color: _selectedParentLink != null ? primaryNavy : Colors.grey,
-                        fontWeight: _selectedParentLink != null ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      hintText: _t("Type parent or student name...", "Andika jina la mzazi au mwanafunzi..."),
-                      prefixIcon: const Icon(Icons.person_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(_showDropdown ? Icons.arrow_drop_up : Icons.arrow_drop_down, color: primaryNavy),
-                        onPressed: () {
-                          setState(() {
-                            _showDropdown = !_showDropdown;
-                          });
-                        },
-                      ),
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (_showDropdown)
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 220),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                      ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _filteredParents.length,
-                        itemBuilder: (context, idx) {
-                          final parent = _filteredParents[idx];
-                          return ListTile(
-                            title: Text(parent['parentName'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text("Parent of ${parent['studentName']} (${parent['level']})"),
-                            onTap: () {
-                              setState(() {
-                                _selectedParentLink = parent;
-                                _searchController.text = parent['parentName'];
-                                _showDropdown = false;
-                              });
-                              _searchFocusNode.unfocus();
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _messageController,
-                    maxLines: 8,
-                    decoration: InputDecoration(
-                      labelText: _t("Message", "Ujumbe"),
-                      hintText: _t("Type your message here...", "Andika ujumbe wako hapa..."),
-                      border: const OutlineInputBorder(),
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                ],
-              ),
-            ),
     );
   }
 }
@@ -2482,44 +2082,18 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
       if (image == null) return;
       
       final now = DateTime.now();
-      final newMsg = {
-        'sender': 'teacher',
-        'senderName': widget.teacherName,
-        'imagePath': image.path,
-        'time': DateFormat.jm().format(now),
-        'date': now.toIso8601String(),
-      };
-
-      if (_useDatabase) {
-        try {
-          await Supabase.instance.client.from('messages').insert({
-            'chat_key': widget.chatKey,
-            'sender': 'teacher',
-            'sender_name': widget.teacherName,
-            'text': "📷 Photo Attachment: ${image.name}",
-            'subject': '',
-            'priority': 'Normal',
-            'read': false,
-          });
-          setState(() {
-            _messages.add(newMsg);
-          });
-          _scrollToBottom();
-        } catch (e) {
-          debugPrint("Error saving teacher image to database: $e");
-          setState(() {
-            _messages.add(newMsg);
-          });
-          _scrollToBottom();
-          await _saveMessages();
-        }
-      } else {
-        setState(() {
-          _messages.add(newMsg);
+      setState(() {
+        _messages.add({
+          'sender': 'teacher',
+          'senderName': widget.teacherName,
+          'imagePath': image.path,
+          'time': DateFormat.jm().format(now),
+          'date': now.toIso8601String(),
         });
-        _scrollToBottom();
-        await _saveMessages();
-      }
+      });
+      _scrollToBottom();
+      await _saveMessages();
+      _triggerDelayedResponse("Shared a photo.");
     } catch (e) {
       debugPrint("Error picking image: $e");
     }
@@ -2532,44 +2106,18 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
 
       final filename = result.files.single.name;
       final now = DateTime.now();
-      final newMsg = {
-        'sender': 'teacher',
-        'senderName': widget.teacherName,
-        'text': "📎 File: $filename",
-        'time': DateFormat.jm().format(now),
-        'date': now.toIso8601String(),
-      };
-
-      if (_useDatabase) {
-        try {
-          await Supabase.instance.client.from('messages').insert({
-            'chat_key': widget.chatKey,
-            'sender': 'teacher',
-            'sender_name': widget.teacherName,
-            'text': "📎 File: $filename",
-            'subject': '',
-            'priority': 'Normal',
-            'read': false,
-          });
-          setState(() {
-            _messages.add(newMsg);
-          });
-          _scrollToBottom();
-        } catch (e) {
-          debugPrint("Error saving teacher file to database: $e");
-          setState(() {
-            _messages.add(newMsg);
-          });
-          _scrollToBottom();
-          await _saveMessages();
-        }
-      } else {
-        setState(() {
-          _messages.add(newMsg);
+      setState(() {
+        _messages.add({
+          'sender': 'teacher',
+          'senderName': widget.teacherName,
+          'text': "📎 File: $filename",
+          'time': DateFormat.jm().format(now),
+          'date': now.toIso8601String(),
         });
-        _scrollToBottom();
-        await _saveMessages();
-      }
+      });
+      _scrollToBottom();
+      await _saveMessages();
+      _triggerDelayedResponse("Shared document: $filename");
     } catch (e) {
       debugPrint("Error picking file: $e");
     }
@@ -2701,7 +2249,7 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color primaryNavy = Theme.of(context).colorScheme.primary;
+    const Color primaryNavy = Color(0xFF0F2C59);
 
     final quickReplies = [
       {'en': 'Please review today\'s quiz', 'sw': 'Kagua chemsha bongo ya leo'},
@@ -2721,7 +2269,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF4F6F9),
-      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: primaryNavy,
         elevation: 1,
@@ -3040,52 +2587,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                   ),
                 )
               ],
-          SafeArea(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.attach_file, color: Colors.grey),
-                    onPressed: _pickFile,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.camera_alt_outlined, color: Colors.grey),
-                    onPressed: _pickImage,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.description_outlined, color: Colors.grey),
-                    onPressed: _pickFile,
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: InputDecoration(
-                        hintText: _t("Type a message...", "Andika ujumbe..."),
-                        filled: true,
-                        fillColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF1F3F5),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  CircleAvatar(
-                    backgroundColor: primaryNavy,
-                    radius: 22,
-                    child: IconButton(
-                      icon: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
-                      onPressed: () => _sendMessage(),
-                    ),
-                  )
-                ],
-              ),
             ),
           )
         ],

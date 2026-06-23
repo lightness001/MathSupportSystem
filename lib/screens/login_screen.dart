@@ -98,7 +98,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     // --- 1. PRE-VALIDATION CHECK (THE "NO EMOJI" RULE) ---
     if (!_isLogin && _selectedRole == 'Parent') {
-      final Set<String> uniqueUsernames = {};
       for (var childEntry in _registerChildren) {
         final childUser = childEntry['username']!.trim().toLowerCase();
         if (childUser.isEmpty) {
@@ -111,11 +110,6 @@ class _LoginScreenState extends State<LoginScreen> {
           );
           return;
         }
-        if (uniqueUsernames.contains(childUser)) {
-          _showError("Duplicate child username '$childUser' detected. Please remove duplicates.");
-          return;
-        }
-        uniqueUsernames.add(childUser);
       }
     }
 
@@ -278,19 +272,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   if (username.isNotEmpty) {
                     try {
-                      // Prevent duplicate linkage during cache sync
-                      final existingLink = await Supabase.instance.client
-                          .from('parent_child_links')
-                          .select()
-                          .eq('parent_id', response.user!.id)
-                          .eq('student_username', username)
-                          .maybeSingle();
-
-                      if (existingLink != null) {
-                        debugPrint("DEBUG LoginScreen: Child '$username' already linked, skipping sync.");
-                        continue;
-                      }
-
                       await Supabase.instance.client.from('parent_child_links').insert({
                         'parent_id': response.user!.id,
                         'student_username': username,
@@ -1044,7 +1025,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
+                ],
+                  const SizedBox(height: 20),
                   const Text(
                     "Link Children & Schools",
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
@@ -1270,7 +1252,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 40),
             ],
           ),
         ),

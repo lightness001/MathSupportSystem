@@ -1,5 +1,5 @@
+import 'dart:io' hide File, Directory;
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -17,7 +17,6 @@ class AppSettings {
   static final ValueNotifier<String> supabaseServiceRoleKey = ValueNotifier<String>('');
 
   static Future<Directory> getSafeDirectory() async {
-    if (kIsWeb) return Directory('/web_storage');
     try {
       final ioDir = await getApplicationDocumentsDirectory();
       return Directory(ioDir.path);
