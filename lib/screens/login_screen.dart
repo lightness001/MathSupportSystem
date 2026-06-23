@@ -30,8 +30,9 @@ class _LoginScreenState extends State<LoginScreen> {
   String _selectedRole = 'Student';
   String _selectedLevel = 'Standard 7';
   String _selectedSchool = 'Westfield Academy';
-  List<String> _teacherClasses = []; // classes assigned by admin during pre-registration
   final List<Map<String, String>> _registerChildren = [
+  List<String> _teacherClasses = []; // classes assigned by admin during pre-registration
+  List<Map<String, String>> _registerChildren = [
     {'username': '', 'school': 'Westfield Academy'}
   ];
   bool _isLogin = true;
@@ -629,10 +630,9 @@ class _LoginScreenState extends State<LoginScreen> {
             'level': _selectedRole == 'Parent'
                 ? 'Parent'
                 : (_selectedRole == 'Teacher'
+                    ? 'Teacher'
                     ? teacherLevelValue
-                    : (_selectedRole == 'Admin' || _selectedRole == 'School Admin'
-                        ? 'Admin'
-                        : _selectedLevel)),
+                    : (_selectedRole == 'Admin' || _selectedRole == 'School Admin' ? 'Admin' : _selectedLevel)),
           };
           if (_selectedRole == 'Student' || _selectedRole == 'Teacher' || _selectedRole == 'School Admin') {
             profileData['school'] = _selectedSchool;
@@ -705,6 +705,11 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } on AuthException catch (error) {
+      _showError(error.message);
+    } catch (e) {
+      if (_isLogin) {
+        await LoginLockout.recordFailure(effectiveUsername);
+      }
       _showError(error.message);
     } catch (e) {
       if (_isLogin) {
@@ -1201,6 +1206,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 20),
               TextField(
                 controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: "Password",
+                  prefixIcon: Icon(Icons.lock),
+                  border: OutlineInputBorder(),
                 obscureText: _obscurePassword,
                 decoration: InputDecoration(
                   labelText: "Password",
@@ -1233,9 +1243,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          "LOGIN SECURELY",
-                          style: TextStyle(
+                      : Text(
+                          _isLogin ? "LOGIN SECURELY" : "REGISTER NOW",
+                          _isLogin ? "LOGIN " : "REGISTER NOW",
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
                           ),
