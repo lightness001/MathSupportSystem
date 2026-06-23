@@ -135,9 +135,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
 
   void _showClassManagementDialog() {
     List<String> tempSelection = List.from(_myClasses);
-    const allLevels = [
-      'Standard 4', 'Standard 7',
-    ];
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -147,7 +144,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: ['Standard 4', 'Standard 7'].map((level) {
-            children: allLevels.map((level) {
               bool isSelected = tempSelection.contains(level);
               return CheckboxListTile(
                 title: Text(level), value: isSelected,
@@ -157,7 +153,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                   } else {
                     tempSelection.remove(level);
                   } });
-                  setDialogState(() { if (val!) tempSelection.add(level); else tempSelection.remove(level); });
                 },
               );
             }).toList(),
@@ -321,7 +316,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
   Widget build(BuildContext context) {
     const Color primaryBlue = Color(0xFF0D47A1);
     final List<Widget> screens = [
-    final List<Widget> _screens = [
       _buildHomeContent(primaryBlue),
       const TeacherHomeworkScreen(),
       const TeacherReportsScreen(),
@@ -352,7 +346,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
             backgroundColor: const Color(0xFFF8F9FA),
             appBar: _buildAppBar(context),
             body: screens[_currentIndex],
-            body: _screens[_currentIndex],
             bottomNavigationBar: BottomNavigationBar(
               currentIndex: _currentIndex > 3 ? 0 : _currentIndex,
               onTap: (index) {

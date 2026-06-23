@@ -10,7 +10,6 @@ void main() async {
 
   // Step 1: Generate a unique test parent phone number
   final parentPhone = "0700${(DateTime.now().millisecondsSinceEpoch % 1000000).toString().padLeft(6, '0')}";
-  final parentPhone = "0700" + (DateTime.now().millisecondsSinceEpoch % 1000000).toString().padLeft(6, '0');
   final parentEmail = "${parentPhone}_private_app@mathsupport.tz";
   final parentPassword = "password123";
   final parentName = "Test Parent Integrator";

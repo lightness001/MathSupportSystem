@@ -31,8 +31,6 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
       if (levelStr.contains(',')) {
         joined = levelStr.split(',').map((e) => e.trim()).toList();
       } else if (levelStr != 'Teacher' && levelStr.isNotEmpty) joined = [levelStr];
-      if (levelStr.contains(',')) joined = levelStr.split(',').map((e) => e.trim()).toList();
-      else if (levelStr != 'Teacher' && levelStr.isNotEmpty) joined = [levelStr];
       setState(() { _myClasses = joined; _isLoadingClasses = false; });
     } catch (e) {
       setState(() => _isLoadingClasses = false);

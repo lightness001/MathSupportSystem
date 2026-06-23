@@ -45,12 +45,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
 
   String _teacherId = "teacher_kamau"; // Default fallback ID mapping Mrs. Kamau
   String _teacherSchool = "";
-  List<Map<String, dynamic>> _broadcasts = [];
-  
-  List<Map<String, dynamic>> _filteredParentMessages = [];
-  List<Map<String, dynamic>> _filteredBroadcasts = [];
-
-  String _teacherId = "teacher_kamau"; // Default fallback ID mapping Mrs. Kamau
 
   @override
   void initState() {
@@ -62,8 +56,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
   String mapDBLevelToMock(String dbLevel) {
     if (dbLevel.toLowerCase().contains('4')) return 'Std 4';
     if (dbLevel.toLowerCase().contains('7')) return 'Std 7';
-    if (dbLevel.toLowerCase().contains('4')) return 'Std 4A';
-    if (dbLevel.toLowerCase().contains('7')) return 'Std 7B';
     return dbLevel;
   }
 
@@ -107,9 +99,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
     } catch (e) {
       debugPrint('Error resolving teacher school: $e');
     }
-  }
-
-    await _initializeChatConfigAndLoad();
   }
 
   Future<File> get _chatHistoryFile async {
@@ -267,22 +256,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
             .toString()
             .toLowerCase()
             .trim();
-        debugPrint("Error fetching teacher portal profiles/links from DB: $dbErr");
-      }
-
-      // Filter students who are in the classes managed by this teacher
-      final List<String> myClassesLower = widget.myClasses.map((c) => c.toLowerCase().trim()).toList();
-      final filteredStudents = studentProfiles.where((s) {
-        final String sLevel = (s['level'] ?? '').toString().toLowerCase().trim();
-        return myClassesLower.any((c) => sLevel.contains(c) || c.contains(sLevel));
-      }).toList();
-
-      final List<String> studentUsernames = filteredStudents.map((s) => s['username'].toString().toLowerCase().trim()).toList();
-      
-      // Filter parent-child links that map to these students
-      final List<Map<String, dynamic>> filteredLinks = [];
-      for (var link in dbLinks) {
-        final String sUsername = (link['student_username'] ?? '').toString().toLowerCase().trim();
         if (studentUsernames.contains(sUsername)) {
           filteredLinks.add(Map<String, dynamic>.from(link));
         }
@@ -297,8 +270,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
           i < min(parentProfiles.length, filteredStudents.length);
           i++
         ) {
-      if (filteredLinks.isEmpty && parentProfiles.isNotEmpty && filteredStudents.isNotEmpty) {
-        for (int i = 0; i < min(parentProfiles.length, filteredStudents.length); i++) {
           filteredLinks.add({
             'parent_id': parentProfiles[i]['id'].toString(),
             'student_username': filteredStudents[i]['username'].toString(),
@@ -310,7 +281,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
       bool dirty = false;
       final Map<String, dynamic> teacherUnreadCounts =
           data['teacher_unread_counts'] ?? {};
-      final Map<String, dynamic> teacherUnreadCounts = data['teacher_unread_counts'] ?? {};
       final Map<String, dynamic> urgents = data['urgents'] ?? {};
       final List<Map<String, dynamic>> resolvedParents = [];
 
@@ -347,21 +317,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
           final String parentName =
               parent['full_name'] ?? parent['username'] ?? 'Parent';
 
-        
-        final student = filteredStudents.firstWhere(
-          (s) => s['username'].toString().toLowerCase().trim() == studentUname.toLowerCase().trim(),
-          orElse: () => null,
-        );
-        
-        final parent = parentProfiles.firstWhere(
-          (p) => p['id'].toString() == parentId,
-          orElse: () => null,
-        );
-        
-        if (student != null && parent != null) {
-          final String studentName = student['full_name'] ?? student['username'] ?? 'Student';
-          final String parentName = parent['full_name'] ?? parent['username'] ?? 'Parent';
-          
           String avatar = 'P';
           final parts = parentName.split(' ');
           if (parts.length >= 2) {
@@ -376,137 +331,18 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
 
           // Do not seed fake conversations; leave chat history empty until there is real data.
 
-            avatar = parentName.substring(0, min(2, parentName.length)).toUpperCase();
-          }
-          
-          final String chatKey = "${student['username']}_$_teacherId";
-          
-          // Seed conversation if not present
-          if (!data.containsKey(chatKey)) {
-            final now = DateTime.now();
-            if (i == 0) {
-              data[chatKey] = [
-                {
-                  'sender': 'parent',
-                  'senderName': parentName,
-                  'text': "Re: ${studentName}'s reading progress. Hi teacher, ${studentName} has been practicing reading every night. They are doing much better.",
-                  'time': "11:05 AM",
-                  'date': now.toIso8601String()
-                }
-              ];
-              teacherUnreadCounts[chatKey] = 1;
-            } else if (i == 1) {
-              data[chatKey] = [
-                {
-                  'sender': 'parent',
-                  'senderName': parentName,
-                  'text': "${studentName} missed school due to illness. They have a fever and we went to the clinic.",
-                  'time': "9:50 AM",
-                  'date': now.toIso8601String()
-                }
-              ];
-              teacherUnreadCounts[chatKey] = 1;
-              urgents[chatKey] = true;
-            } else {
-              data[chatKey] = [
-                {
-                  'sender': 'teacher',
-                  'senderName': widget.teacherName,
-                  'text': "Thank you for the feedback, $parentName! Let me know if ${studentName} needs help.",
-                  'time': "Yesterday",
-                  'date': now.subtract(const Duration(days: 1)).toIso8601String()
-                }
-              ];
-              teacherUnreadCounts[chatKey] = 0;
-            }
-            dirty = true;
-          }
-          
           resolvedParents.add({
             'studentName': studentName,
             'studentUser': student['username'],
             'parentName': parentName,
             'avatar': avatar,
             'level': mapDBLevelToMock(student['level'] ?? 'Standard 4'),
-            'status': Random().nextBool() ? 'Online' : 'Offline',
             'chatKey': chatKey,
           });
         }
       }
 
       // Do not seed default notifications; only preserve notifications created by real interactions.
-      // Seed broadcasts list if not present
-      if (!data.containsKey('broadcasts')) {
-        data['broadcasts'] = [
-          {
-            'id': 'b1',
-            'title': "Term 2 Exam Schedule",
-            'message': "Term 2 Exam Schedule has been finalized. Please make sure students revise units 1 to 5.",
-            'sentTo': ["Std 4A"],
-            'time': "Mon",
-            'date': DateTime.now().subtract(const Duration(days: 3)).toIso8601String(),
-            'recipientCount': 28
-          }
-        ];
-        dirty = true;
-      }
-
-      // Seed default notifications list if not present
-      if (!data.containsKey('notifications')) {
-        data['notifications'] = [
-          {
-            'id': 'n1',
-            'title': "Mrs. Kamau sent you a message about Amani's assessment results",
-            'body': "Std 4A · 10:22 AM",
-            'class': "Std 4A",
-            'time': "10:22 AM",
-            'date': DateTime.now().toIso8601String(),
-            'type': "urgent",
-            'read': false
-          },
-          {
-            'id': 'n2',
-            'title': "Ms. Oloo marked a message urgent — absence follow-up",
-            'body': "Std 4A · 9:15 AM",
-            'class': "Std 4A",
-            'time': "9:15 AM",
-            'date': DateTime.now().toIso8601String(),
-            'type': "urgent",
-            'read': false
-          },
-          {
-            'id': 'n3',
-            'title': "Mr. Mwangi replied to your message about the science project",
-            'body': "Std 7B · Yesterday 4:30 PM",
-            'class': "Std 7B",
-            'time': "Yesterday 4:30 PM",
-            'date': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
-            'type': "reply",
-            'read': false
-          },
-          {
-            'id': 'n4',
-            'title': "School broadcast: End-of-term parent meeting on 28 June at 2 PM",
-            'body': "Mwangi Primary · Mon",
-            'class': "Mwangi Primary",
-            'time': "Mon",
-            'date': DateTime.now().subtract(const Duration(days: 3)).toIso8601String(),
-            'type': "info",
-            'read': true
-          },
-          {
-            'id': 'n5',
-            'title': "Mr. Njoroge updated the Term 2 timetable",
-            'body': "Std 7B · Fri",
-            'class': "Std 7B",
-            'time': "Fri",
-            'date': DateTime.now().subtract(const Duration(days: 5)).toIso8601String(),
-            'type': "info",
-            'read': true
-          }
-        ];
-        dirty = true;
-      }
 
       if (dirty) {
         await file.writeAsString(jsonEncode(data));
@@ -521,7 +357,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
           continue;
         }
 
-        List<dynamic> history = data[chatKey] ?? [];
         String lastMsgText = "No messages yet";
         String lastMsgTime = "";
         DateTime sortTime = DateTime.fromMillisecondsSinceEpoch(0);
@@ -533,13 +368,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
         lastMsgTime = lastMsg['time'] ?? "";
         if (lastMsg['date'] != null) {
           sortTime = DateTime.parse(lastMsg['date']);
-        if (history.isNotEmpty) {
-          final lastMsg = history.last;
-          lastMsgText = lastMsg['imagePath'] != null ? "📷 Attachment" : (lastMsg['text'] ?? "");
-          lastMsgTime = lastMsg['time'] ?? "";
-          if (lastMsg['date'] != null) {
-            sortTime = DateTime.parse(lastMsg['date']);
-          }
         }
 
         final unreadCount = teacherUnreadCounts[chatKey] ?? 0;
@@ -565,19 +393,10 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
         setState(() {
           _parentMessages = parentConversationsList;
           _availableParentContacts = resolvedParents;
-      // Load broadcasts from json
-      final List<dynamic> jsonBroadcasts = data['broadcasts'] ?? [];
-      final List<Map<String, dynamic>> broadcastsList = jsonBroadcasts.map((b) => Map<String, dynamic>.from(b)).toList();
-
-      if (mounted) {
-        setState(() {
-          _parentMessages = parentConversationsList;
-          _broadcasts = broadcastsList;
           _applyFilters();
           _isLoading = false;
         });
       }
-
     } catch (e) {
       debugPrint("Error loading teacher chat data: $e");
       if (mounted) setState(() => _isLoading = false);
@@ -596,18 +415,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
       filteredMsg = filteredMsg
           .where((m) => (m['unreadCount'] as num) > 0)
           .toList();
-    List<Map<String, dynamic>> filteredBrd = List.from(_broadcasts);
-
-    // Filter by tab
-    if (_activeFilter == "Std 4A") {
-      filteredMsg = filteredMsg.where((m) => m['level'] == "Std 4A").toList();
-      filteredBrd = filteredBrd.where((b) => (b['sentTo'] as List).contains("Std 4A")).toList();
-    } else if (_activeFilter == "Std 7B") {
-      filteredMsg = filteredMsg.where((m) => m['level'] == "Std 7B").toList();
-      filteredBrd = filteredBrd.where((b) => (b['sentTo'] as List).contains("Std 7B")).toList();
-    } else if (_activeFilter == "Unread") {
-      filteredMsg = filteredMsg.where((m) => (m['unreadCount'] as num) > 0).toList();
-      filteredBrd = []; // Broadcasts don't have unread counts on teacher side
     }
 
     // Filter by search
@@ -618,17 +425,10 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
         final text = m['lastMessage'].toString().toLowerCase();
         return parentName.contains(query) || text.contains(query);
       }).toList();
-
-      filteredBrd = filteredBrd.where((b) {
-        final title = b['title'].toString().toLowerCase();
-        final msg = b['message'].toString().toLowerCase();
-        return title.contains(query) || msg.contains(query);
-      }).toList();
     }
 
     setState(() {
       _filteredParentMessages = filteredMsg;
-      _filteredBroadcasts = filteredBrd;
     });
   }
 
@@ -654,7 +454,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
       backgroundColor: isDark
           ? const Color(0xFF121212)
           : const Color(0xFFF4F6F9),
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF4F6F9),
       appBar: AppBar(
         backgroundColor: primaryNavy,
         elevation: 0,
@@ -681,7 +480,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                   fontSize: 24,
                   color: Colors.white,
                 ),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Colors.white),
               ),
         actions: [
           _isSearching
@@ -701,11 +499,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
               Icons.notifications_none_outlined,
               color: Colors.white,
             ),
-                  icon: const Icon(Icons.tune, color: Colors.white), // Funnel/Filter
-                  onPressed: () => setState(() => _isSearching = true),
-                ),
-          IconButton(
-            icon: const Icon(Icons.notifications_none_outlined, color: Colors.white),
             tooltip: _t("Notifications", "Taarifa"),
             onPressed: () async {
               await Navigator.push(
@@ -720,8 +513,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
           IconButton(
             icon: const Icon(Icons.message_outlined, color: Colors.white),
             tooltip: _t("New Message", "Ujumbe Mpya"),
-            icon: const Icon(Icons.edit_square, color: Colors.white),
-            tooltip: _t("Broadcast Message", "Ujumbe wa Tangazo"),
             onPressed: () async {
               final result = await Navigator.push(
                 context,
@@ -731,7 +522,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                     teacherId: _teacherId,
                     availableParents: _availableParentContacts,
                   ),
-                  builder: (context) => const BroadcastMessageScreen(),
                 ),
               );
               if (result == true) {
@@ -754,7 +544,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                 children: ["All classes", "Std 4", "Std 7", "Unread"].map((
                   filterName,
                 ) {
-                children: ["All classes", "Std 4A", "Std 7B", "Unread"].map((filterName) {
                   final bool isSelected = _activeFilter == filterName;
                   return GestureDetector(
                     onTap: () {
@@ -767,7 +556,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                         horizontal: 20,
                         vertical: 8,
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                       decoration: BoxDecoration(
                         color: isSelected
                             ? primaryNavy
@@ -793,13 +581,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                           color: isSelected
                               ? Colors.white
                               : (isDark ? Colors.white70 : Colors.black87),
-                            )
-                        ],
-                      ),
-                      child: Text(
-                        _t(filterName, filterName == "Unread" ? "Ambazo hazijasomwa" : filterName),
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
                         ),
@@ -823,12 +604,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                       horizontal: 16,
                       vertical: 8,
                     ),
-          
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(primaryNavy)))
-                : ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     children: [
                       // Section 1: PARENT MESSAGES
                       if (_filteredParentMessages.isNotEmpty) ...[
@@ -857,13 +632,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
-                          final bool isOnline = parentMsg['status'] == 'Online';
-
-                          return Card(
-                            elevation: 0,
-                            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                            margin: const EdgeInsets.only(bottom: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             child: ListTile(
                               onTap: () async {
                                 await _markAsRead(parentMsg['chatKey']);
@@ -881,15 +649,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                           teacherId: _teacherId,
                                           teacherName: widget.teacherName,
                                         ),
-                                    builder: (context) => TeacherConversationScreen(
-                                      studentName: parentMsg['studentName'],
-                                      studentUser: parentMsg['studentUser'],
-                                      parentName: parentMsg['parentName'],
-                                      studentLevel: parentMsg['level'],
-                                      chatKey: parentMsg['chatKey'],
-                                      teacherId: _teacherId,
-                                      teacherName: widget.teacherName,
-                                    ),
                                   ),
                                 );
                                 _loadData();
@@ -899,6 +658,7 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                   CircleAvatar(
                                     backgroundColor: isDark
                                         ? Colors.grey[800]
+                                        : const Color(0xFFE8ECEF),
                                     child: Text(
                                       parentMsg['avatar'] ?? 'P',
                                       style: const TextStyle(
@@ -911,14 +671,9 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                     Positioned(
                                       right: 0,
                                       top: 0,
-                                    backgroundColor: isDark ? Colors.grey[800] : const Color(0xFFE8ECEF),
-                                    child: Text(parentMsg['avatar'] ?? 'P', style: const TextStyle(fontWeight: FontWeight.bold, color: primaryNavy)),
-                                  if (isOnline)
-                                    Positioned(
-                                      right: 0,
-                                      bottom: 0,
                                       child: Container(
                                         width: 12,
+                                        height: 12,
                                         decoration: BoxDecoration(
                                           color: Colors.red,
                                           shape: BoxShape.circle,
@@ -928,9 +683,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                                 : Colors.white,
                                             width: 2,
                                           ),
-                                          color: Colors.green,
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: isDark ? const Color(0xFF1E1E1E) : Colors.white, width: 2),
                                         ),
                                       ),
                                     ),
@@ -954,12 +706,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                       color: isDark
                                           ? Colors.grey[850]
                                           : const Color(0xFFE3F2FD),
-                                  Text(parentMsg['parentName'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isDark ? Colors.grey[850] : const Color(0xFFE3F2FD),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
@@ -971,7 +717,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
                                       ),
-                                      style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF1E88E5), fontSize: 10, fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                   if (isUrgent) ...[
@@ -995,11 +740,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                       ),
                                     ),
                                   ],
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(color: const Color(0xFFD32F2F), borderRadius: BorderRadius.circular(4)),
-                                      child: Text(_t("Urgent", "Haraka"), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                    ),
-                                  ]
                                 ],
                               ),
                               subtitle: Text(
@@ -1011,7 +751,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                       ? FontWeight.bold
                                       : FontWeight.normal,
                                 ),
-                                style: TextStyle(fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal),
                               ),
                               trailing: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -1024,7 +763,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                       color: Colors.grey,
                                     ),
                                   ),
-                                  Text(parentMsg['time'], style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                   const SizedBox(height: 4),
                                   if (unreadCount > 0)
                                     Container(
@@ -1042,54 +780,12 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
                                         ),
                                       ),
                                     ),
-                                      decoration: const BoxDecoration(color: primaryNavy, shape: BoxShape.circle),
-                                      child: Text('$unreadCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                    )
                                 ],
                               ),
                             ),
                           );
                         }),
                       ],
-                        }).toList(),
-                      ],
-
-                      // Section 2: BROADCASTS SENT
-                      if (_filteredBroadcasts.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: Text(
-                            _t("BROADCASTS SENT", "TANGAKO ZILIZOTUMWA"),
-                            style: TextStyle(
-                              color: isDark ? Colors.white54 : Colors.grey[600],
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ),
-                        ..._filteredBroadcasts.map((broadcast) {
-                          return Card(
-                            elevation: 0,
-                            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                            margin: const EdgeInsets.only(bottom: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            child: ListTile(
-                              leading: const CircleAvatar(
-                                backgroundColor: Color(0xFFE3F2FD),
-                                child: Icon(Icons.campaign_outlined, color: primaryNavy),
-                              ),
-                              title: Text(broadcast['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text(
-                                "Sent to all ${broadcast['sentTo']?.join(', ')} · ${broadcast['recipientCount']} delivered",
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                              trailing: Text(broadcast['time'], style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                            ),
-                          );
-                        }).toList(),
-                      ]
                     ],
                   ),
           ),
@@ -1106,7 +802,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
         final Map<String, dynamic> data = jsonDecode(content);
         final Map<String, dynamic> unreadCounts =
             data['teacher_unread_counts'] ?? {};
-        final Map<String, dynamic> unreadCounts = data['teacher_unread_counts'] ?? {};
         unreadCounts[chatKey] = 0;
         data['teacher_unread_counts'] = unreadCounts;
         await file.writeAsString(jsonEncode(data));
@@ -1116,7 +811,6 @@ class _TeacherChatPortalState extends State<TeacherChatPortal> {
     }
   }
 }
-
 
 // -----------------------------------------------------------------------------
 // SCREEN 5 — NOTIFICATIONS
@@ -1131,10 +825,6 @@ class TeacherNotificationsScreen extends StatefulWidget {
 
 class _TeacherNotificationsScreenState
     extends State<TeacherNotificationsScreen> {
-  State<TeacherNotificationsScreen> createState() => _TeacherNotificationsScreenState();
-}
-
-class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen> {
   List<Map<String, dynamic>> _notifications = [];
   bool _isLoading = true;
 
@@ -1160,7 +850,6 @@ class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen>
           _notifications = list
               .map((n) => Map<String, dynamic>.from(n))
               .toList();
-          _notifications = list.map((n) => Map<String, dynamic>.from(n)).toList();
           _isLoading = false;
         });
       } else {
@@ -1180,7 +869,6 @@ class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen>
         final Map<String, dynamic> data = jsonDecode(content);
         final List<dynamic> list = data['notifications'] ?? [];
 
-        
         for (var item in list) {
           item['read'] = true;
         }
@@ -1191,9 +879,6 @@ class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen>
           _notifications = list
               .map((n) => Map<String, dynamic>.from(n))
               .toList();
-        
-        setState(() {
-          _notifications = list.map((n) => Map<String, dynamic>.from(n)).toList();
         });
       }
     } catch (e) {
@@ -1230,7 +915,6 @@ class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen>
       backgroundColor: isDark
           ? const Color(0xFF121212)
           : const Color(0xFFF4F6F9),
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF4F6F9),
       appBar: AppBar(
         backgroundColor: primaryNavy,
         elevation: 0,
@@ -1241,7 +925,6 @@ class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen>
             fontWeight: FontWeight.bold,
             color: Colors.white,
           ),
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         actions: [
           TextButton(
@@ -1254,9 +937,6 @@ class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen>
               ),
             ),
           ),
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-          )
         ],
       ),
       body: _isLoading
@@ -1297,33 +977,6 @@ class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen>
                 ],
               ],
             ),
-              ? Center(child: Text(_t("No notifications.", "Hakuna taarifa.")))
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    if (todayNotifs.isNotEmpty) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8.0),
-                        child: Text(
-                          _t("TODAY", "LEO"),
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12),
-                        ),
-                      ),
-                      ...todayNotifs.map((n) => _buildNotificationTile(n)),
-                    ],
-                    if (earlierNotifs.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8.0),
-                        child: Text(
-                          _t("EARLIER", "ZILIZOPITA"),
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12),
-                        ),
-                      ),
-                      ...earlierNotifs.map((n) => _buildNotificationTile(n)),
-                    ],
-                  ],
-                ),
     );
   }
 
@@ -1332,7 +985,6 @@ class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen>
     final bool isRead = n['read'] ?? false;
     final String type = n['type'] ?? 'info';
 
-    
     Color dotColor = Colors.grey;
     if (!isRead) {
       if (type == 'urgent') {
@@ -1370,10 +1022,6 @@ class _TeacherNotificationsScreenState extends State<TeacherNotificationsScreen>
           n['time'] ?? '',
           style: const TextStyle(fontSize: 11, color: Colors.grey),
         ),
-          style: TextStyle(fontWeight: isRead ? FontWeight.normal : FontWeight.bold, fontSize: 14),
-        ),
-        subtitle: Text(n['body'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        trailing: Text(n['time'] ?? '', style: const TextStyle(fontSize: 11, color: Colors.grey)),
       ),
     );
   }
@@ -1409,121 +1057,6 @@ class _TeacherComposeMessageScreenState
     if (widget.availableParents.isNotEmpty) {
       _selectedParent = widget.availableParents.first;
     }
-
-// -----------------------------------------------------------------------------
-// SCREEN 6 — BROADCAST MESSAGE
-// -----------------------------------------------------------------------------
-class BroadcastMessageScreen extends StatefulWidget {
-  const BroadcastMessageScreen({super.key});
-
-  @override
-  State<BroadcastMessageScreen> createState() => _BroadcastMessageScreenState();
-}
-
-class _BroadcastMessageScreenState extends State<BroadcastMessageScreen> {
-  final TextEditingController _subjectController = TextEditingController();
-  final TextEditingController _messageController = TextEditingController();
-
-  final List<String> _selectedGroups = ["All Std 4A parents", "All Std 7B parents"];
-  bool _scheduleForLater = false;
-  DateTime? _scheduledDate;
-  TimeOfDay? _scheduledTime;
-
-  Future<File> get _chatHistoryFile async {
-    final directory = await AppSettings.getSafeDirectory();
-    return File('${directory.path}/parent_chats_config.json');
-  }
-
-  Future<void> _sendBroadcast() async {
-    if (_subjectController.text.trim().isEmpty || _messageController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a subject and a message.")),
-      );
-      return;
-    }
-
-    try {
-      final file = await _chatHistoryFile;
-      Map<String, dynamic> data = {};
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        data = jsonDecode(content);
-      }
-
-      final List<dynamic> broadcasts = data['broadcasts'] ?? [];
-      
-      final now = DateTime.now();
-      final Map<String, dynamic> newBroadcast = {
-        'id': DateTime.now().millisecondsSinceEpoch.toString(),
-        'title': _subjectController.text.trim(),
-        'message': _messageController.text.trim(),
-        'sentTo': _selectedGroups.map((g) => g.replaceAll("All ", "").replaceAll(" parents", "")).toList(),
-        'time': DateFormat.jm().format(now),
-        'date': now.toIso8601String(),
-        'recipientCount': 32
-      };
-
-      broadcasts.insert(0, newBroadcast);
-      data['broadcasts'] = broadcasts;
-
-      // Broadcast message delivery simulation: append messages to matching group chats
-      final targetClasses = _selectedGroups.map((g) => g.replaceAll("All ", "").replaceAll(" parents", "")).toList();
-      
-      // Seed group/class chats inside JSON
-      // Mrs. Kamau matches Greenwood Academy Std 4
-      final amaniClassKey = "amani_group_Greenwood Academy_class";
-      if (targetClasses.contains("Std 4A")) {
-        if (!data.containsKey(amaniClassKey)) {
-          data[amaniClassKey] = [];
-        }
-        final List<dynamic> history = data[amaniClassKey];
-        history.add({
-          'sender': 'teacher',
-          'senderName': 'Mrs. Kamau',
-          'text': "📢 BROADCAST: ${_subjectController.text.trim()}\n\n${_messageController.text.trim()}",
-          'time': DateFormat.jm().format(now),
-          'date': now.toIso8601String(),
-        });
-        data[amaniClassKey] = history;
-      }
-
-      await file.writeAsString(jsonEncode(data));
-
-      if (mounted) {
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      debugPrint("Error sending broadcast: $e");
-    }
-  }
-
-  void _showAddGroupDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Add Class Group"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: ["All Std 4B parents", "All Std 7A parents", "All Std 3 parents"].map((g) {
-              return ListTile(
-                title: Text(g),
-                onTap: () {
-                  if (!_selectedGroups.contains(g)) {
-                    setState(() => _selectedGroups.add(g));
-                  }
-                  Navigator.pop(context);
-                },
-              );
-            }).toList(),
-          ),
-        );
-      },
-    );
-  }
-
-  String _t(String en, String sw) {
-    return AppSettings.language.value == 'Kiswahili' ? sw : en;
   }
 
   @override
@@ -1669,162 +1202,12 @@ class _BroadcastMessageScreenState extends State<BroadcastMessageScreen> {
                 ),
               ),
             ],
-    const Color primaryNavy = Color(0xFF0F2C59);
-
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: primaryNavy),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          _t("Broadcast Message", "Tangazo"),
-          style: const TextStyle(color: primaryNavy, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Send To
-            Text(_t("Send to", "Tuma Kwa"), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ..._selectedGroups.map((g) {
-                  return Chip(
-                    label: Text(g, style: const TextStyle(fontSize: 12)),
-                    deleteIcon: const Icon(Icons.close, size: 14),
-                    onDeleted: () => setState(() => _selectedGroups.remove(g)),
-                  );
-                }),
-                ActionChip(
-                  label: const Text("+ Add group", style: TextStyle(fontSize: 12)),
-                  onPressed: _showAddGroupDialog,
-                )
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              "32 parents will receive this message",
-              style: TextStyle(color: Colors.grey[600], fontSize: 12, fontStyle: FontStyle.italic),
-            ),
-            const SizedBox(height: 20),
-
-            // Subject
-            Text(_t("Subject", "Somo/Kichwa"), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _subjectController,
-              decoration: InputDecoration(
-                hintText: "e.g. End-of-Term Meeting — 28 June",
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Message
-            Text(_t("Message", "Ujumbe"), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _messageController,
-              maxLines: 8,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(
-                hintText: _t("Type your message here...", "Andika ujumbe wako hapa..."),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                contentPadding: const EdgeInsets.all(16),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Schedule for later
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_t("Schedule for later", "Ratibu kwa ajili ya baadaye"), style: const TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Send at a specific time",
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                  ],
-                ),
-                Switch(
-                  value: _scheduleForLater,
-                  onChanged: (val) {
-                    setState(() => _scheduleForLater = val);
-                  },
-                ),
-              ],
-            ),
-            if (_scheduleForLater) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final date = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 30)),
-                      );
-                      if (date != null) setState(() => _scheduledDate = date);
-                    },
-                    icon: const Icon(Icons.calendar_today),
-                    label: Text(_scheduledDate == null ? "Select Date" : DateFormat.yMMMd().format(_scheduledDate!)),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final time = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (time != null) setState(() => _scheduledTime = time);
-                    },
-                    icon: const Icon(Icons.access_time),
-                    label: Text(_scheduledTime == null ? "Select Time" : _scheduledTime!.format(context)),
-                  ),
-                ],
-              )
-            ],
-
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: _sendBroadcast,
-                icon: const Icon(Icons.send, color: Colors.white),
-                label: Text(
-                  _t("Send to 32 parents", "Tuma kwa wazazi 32"),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryNavy,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            )
           ],
         ),
       ),
     );
   }
 }
-
 
 // -----------------------------------------------------------------------------
 // TEACHER CONVERSATION DETAIL VIEW
@@ -1852,7 +1235,6 @@ class TeacherConversationScreen extends StatefulWidget {
   @override
   State<TeacherConversationScreen> createState() =>
       _TeacherConversationScreenState();
-  State<TeacherConversationScreen> createState() => _TeacherConversationScreenState();
 }
 
 class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
@@ -1860,7 +1242,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = true;
-  bool _isTyping = false;
   List<Map<String, dynamic>> _messages = [];
   Timer? _pollTimer;
 
@@ -1896,7 +1277,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
           .eq('chat_key', widget.chatKey)
           .order('created_at', ascending: true);
 
-      
       final List<dynamic> data = res as List<dynamic>;
       final List<Map<String, dynamic>> dbMsgs = data.map((item) {
         return {
@@ -1907,8 +1287,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
               ? DateFormat.jm().format(
                   DateTime.parse(item['created_at'].toString()).toLocal(),
                 )
-          'time': item['created_at'] != null 
-              ? DateFormat.jm().format(DateTime.parse(item['created_at'].toString()).toLocal()) 
               : '',
           'date': item['created_at']?.toString() ?? '',
           'subject': item['subject']?.toString() ?? '',
@@ -1927,7 +1305,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
       if (errStr.contains('pgrst205') ||
           errStr.contains('not find the table') ||
           errStr.contains('404')) {
-      if (errStr.contains('pgrst205') || errStr.contains('not find the table') || errStr.contains('404')) {
         debugPrint("Supabase messages table not found. Falling back to JSON.");
       } else {
         debugPrint("Error fetching from Supabase messages table: $e");
@@ -1979,8 +1356,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                 ? DateFormat.jm().format(
                     DateTime.parse(item['created_at'].toString()).toLocal(),
                   )
-            'time': item['created_at'] != null 
-                ? DateFormat.jm().format(DateTime.parse(item['created_at'].toString()).toLocal()) 
                 : '',
             'date': item['created_at']?.toString() ?? '',
             'subject': item['subject']?.toString() ?? '',
@@ -2006,7 +1381,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
           if (data.containsKey(widget.chatKey)) {
             final List<Map<String, dynamic>> newMsgs =
                 List<Map<String, dynamic>>.from(data[widget.chatKey]);
-            final List<Map<String, dynamic>> newMsgs = List<Map<String, dynamic>>.from(data[widget.chatKey]);
             if (newMsgs.length != _messages.length) {
               setState(() {
                 _messages = newMsgs;
@@ -2078,9 +1452,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
       );
       if (image == null) return;
 
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
-      if (image == null) return;
-      
       final now = DateTime.now();
       setState(() {
         _messages.add({
@@ -2093,7 +1464,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
       });
       _scrollToBottom();
       await _saveMessages();
-      _triggerDelayedResponse("Shared a photo.");
     } catch (e) {
       debugPrint("Error picking image: $e");
     }
@@ -2117,7 +1487,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
       });
       _scrollToBottom();
       await _saveMessages();
-      _triggerDelayedResponse("Shared document: $filename");
     } catch (e) {
       debugPrint("Error picking file: $e");
     }
@@ -2173,73 +1542,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
     }
 
     await _incrementParentUnreadCount();
-    // Trigger parent response simulation
-    _triggerDelayedResponse(text);
-  }
-
-  void _triggerDelayedResponse(String triggerText) {
-    setState(() => _isTyping = true);
-    _scrollToBottom();
-
-    Future.delayed(const Duration(seconds: 2), () async {
-      if (!mounted) return;
-
-      String reply = "";
-      final lower = triggerText.toLowerCase();
-
-      if (lower.contains("hello") || lower.contains("habari")) {
-        reply = "Hello, teacher! Thank you for checking in. How is David doing in class?";
-      } else if (lower.contains("progress") || lower.contains("reading") || lower.contains("performance")) {
-        reply = "Thank you so much. We have been reading together daily and his confidence is growing!";
-      } else if (lower.contains("homework") || lower.contains("assignment")) {
-        reply = "I will sit down with David tonight and ensure he completes the division homework.";
-      } else {
-        reply = "Thank you, teacher. We appreciate all your guidance and support!";
-      }
-
-      final now = DateTime.now();
-      final replyMsg = {
-        'sender': 'parent',
-        'senderName': widget.parentName,
-        'text': reply,
-        'time': DateFormat.jm().format(now),
-        'date': now.toIso8601String(),
-      };
-
-      if (_useDatabase) {
-        try {
-          await Supabase.instance.client.from('messages').insert({
-            'chat_key': widget.chatKey,
-            'sender': 'parent',
-            'sender_name': widget.parentName,
-            'text': reply,
-            'subject': '',
-            'priority': 'Normal',
-            'read': false,
-          });
-          setState(() {
-            _messages.add(replyMsg);
-            _isTyping = false;
-          });
-          _scrollToBottom();
-        } catch (e) {
-          debugPrint("Error saving simulated parent response to database: $e");
-          setState(() {
-            _messages.add(replyMsg);
-            _isTyping = false;
-          });
-          _scrollToBottom();
-          await _saveMessages();
-        }
-      } else {
-        setState(() {
-          _messages.add(replyMsg);
-          _isTyping = false;
-        });
-        _scrollToBottom();
-        await _saveMessages();
-      }
-    });
   }
 
   String _t(String en, String sw) {
@@ -2264,11 +1566,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
       backgroundColor: isDark
           ? const Color(0xFF121212)
           : const Color(0xFFF4F6F9),
-      {'en': 'Ensure homework is complete', 'sw': 'Hakikisha homework imekamilika'},
-    ];
-
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF4F6F9),
       appBar: AppBar(
         backgroundColor: primaryNavy,
         elevation: 1,
@@ -2287,8 +1584,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
                 ),
-                widget.parentName.substring(0, min(2, widget.parentName.length)).toUpperCase(),
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ),
             const SizedBox(width: 10),
@@ -2303,7 +1598,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
@@ -2331,7 +1625,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                       final bool isMe = msg['sender'] == 'teacher';
                       final bool showSeparator = index == 0;
 
-                      
                       return Column(
                         children: [
                           if (showSeparator)
@@ -2366,21 +1659,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                                     : (isDark
                                           ? const Color(0xFF262626)
                                           : Colors.white),
-                                style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          Align(
-                            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              constraints: BoxConstraints(
-                                maxWidth: MediaQuery.of(context).size.width * 0.75,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isMe 
-                                    ? primaryNavy 
-                                    : (isDark ? const Color(0xFF262626) : Colors.white),
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
@@ -2388,7 +1666,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                                     blurRadius: 4,
                                     offset: const Offset(0, 2),
                                   ),
-                                  )
                                 ],
                               ),
                               child: Column(
@@ -2406,7 +1683,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                                                   Icons.broken_image,
                                                   size: 50,
                                                 ),
-                                        errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 50),
                                       ),
                                     ),
                                     const SizedBox(height: 6),
@@ -2420,7 +1696,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                                             : (isDark
                                                   ? Colors.white70
                                                   : Colors.black87),
-                                        color: isMe ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
                                         fontSize: 15,
                                       ),
                                     ),
@@ -2436,7 +1711,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                                           color: isMe
                                               ? Colors.white70
                                               : Colors.grey,
-                                          color: isMe ? Colors.white70 : Colors.grey,
                                           fontSize: 10,
                                         ),
                                       ),
@@ -2451,9 +1725,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                                           ),
                                         ),
                                       ],
-                                          style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
-                                        )
-                                      ]
                                     ],
                                   ),
                                 ],
@@ -2466,19 +1737,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                   ),
           ),
 
-          
-          if (_isTyping)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _t("${widget.parentName} is typing...", "${widget.parentName} anaandika..."),
-                  style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12),
-                ),
-              ),
-            ),
-            
           // Quick actions for teacher
           Container(
             height: 40,
@@ -2502,9 +1760,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    label: Text(replyText, style: const TextStyle(fontSize: 12)),
-                    backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     onPressed: () => _sendMessage(customText: replyText),
                   ),
                 );
@@ -2512,7 +1767,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
             ),
           ),
 
-          
           // Bottom Input Bar
           Container(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
@@ -2535,11 +1789,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                     Icons.description_outlined,
                     color: Colors.grey,
                   ),
-                  icon: const Icon(Icons.camera_alt_outlined, color: Colors.grey),
-                  onPressed: _pickImage,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.description_outlined, color: Colors.grey),
                   onPressed: _pickFile,
                 ),
                 const SizedBox(width: 4),
@@ -2553,7 +1802,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                       fillColor: isDark
                           ? const Color(0xFF2C2C2C)
                           : const Color(0xFFF1F3F5),
-                      fillColor: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF1F3F5),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide.none,
@@ -2562,7 +1810,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
                         horizontal: 16,
                         vertical: 10,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     ),
                   ),
                 ),
@@ -2582,13 +1829,6 @@ class _TeacherConversationScreenState extends State<TeacherConversationScreen> {
               ],
             ),
           ),
-                    icon: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
-                    onPressed: () => _sendMessage(),
-                  ),
-                )
-              ],
-            ),
-          )
         ],
       ),
     );

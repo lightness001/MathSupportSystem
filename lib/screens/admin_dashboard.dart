@@ -2,13 +2,11 @@ import 'dart:convert';
 import 'dart:io' hide File, Directory;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/web_safe_file.dart';
 import '../services/school_service.dart';
 import '../services/audit_log_service.dart';
-import '../main.dart';
 import 'login_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -28,10 +26,6 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> with SingleTickerProviderStateMixin {
-  // Supabase service role key — required for admin password resets via the Auth API.
-  static const _supabaseServiceRoleKey = 'supabase_service_key';
-  static const _supabaseUrl = 'https://wnxeohqejdiytqkxdcwe.supabase.co';
-
   late TabController _tabController;
   final List<School> _schoolsList = [];
   List<Map<String, dynamic>> _profilesList = [];
@@ -252,7 +246,7 @@ class _AdminDashboardState extends State<AdminDashboard> with SingleTickerProvid
 
         if (statusStr == 'pending' && !registeredUsernames.contains(admissionNum.toLowerCase())) {
           loadedProfiles.add({
-            'id': record['id']?.toString() ?? 'pre_${admissionNum}',
+            'id': record['id']?.toString() ?? 'pre_$admissionNum',
             'full_name': record['full_name']?.toString() ?? 'Authorized Student',
             'role': 'student',
             'username': admissionNum,
@@ -273,7 +267,7 @@ class _AdminDashboardState extends State<AdminDashboard> with SingleTickerProvid
 
         if (statusStr == 'pending' && !registeredUsernames.contains(empNum.toLowerCase())) {
           loadedProfiles.add({
-            'id': record['id']?.toString() ?? 'pre_tch_${empNum}',
+            'id': record['id']?.toString() ?? 'pre_tch_$empNum',
             'full_name': record['full_name']?.toString() ?? 'Authorized Teacher',
             'role': 'teacher',
             'username': empNum,
@@ -294,7 +288,7 @@ class _AdminDashboardState extends State<AdminDashboard> with SingleTickerProvid
 
         if (statusStr == 'pending' && !registeredUsernames.contains(username.toLowerCase())) {
           loadedProfiles.add({
-            'id': record['id']?.toString() ?? 'pre_sad_${username}',
+            'id': record['id']?.toString() ?? 'pre_sad_$username',
             'full_name': record['full_name']?.toString() ?? 'Authorized School Admin',
             'role': 'school_admin',
             'username': username,
@@ -757,7 +751,7 @@ class _AdminDashboardState extends State<AdminDashboard> with SingleTickerProvid
                 ),
                 const SizedBox(height: 18),
                 DropdownButtonFormField<String>(
-                  value: editStatus,
+                  initialValue: editStatus,
                   decoration: InputDecoration(
                     labelText: "Operational Status",
                     prefixIcon: const Icon(Icons.settings_power),
@@ -1006,7 +1000,7 @@ class _AdminDashboardState extends State<AdminDashboard> with SingleTickerProvid
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<String>(
-                value: currentStatus,
+                initialValue: currentStatus,
                 decoration: const InputDecoration(
                   labelText: "Account Status",
                   border: OutlineInputBorder(),
@@ -1299,7 +1293,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
         title: const Row(
           children: [
             Icon(Icons.terminal, color: Color(0xFF0D47A1)),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             Text("Supabase SQL Setup"),
           ],
         ),
@@ -1630,7 +1624,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: const Color(0xFF0D47A1), width: 1.5),
+                borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 1.5),
               ),
             ),
           ),
@@ -1805,7 +1799,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                 ),
               ),
             );
-            }).toList(),
+            }),
           const SizedBox(height: 80),
         ],
       ),
@@ -1814,8 +1808,8 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
 
   // --- PRE-REGISTER STUDENT DIALOG ---
   void _showPreRegisterStudentDialog() {
-    final _preNameController = TextEditingController();
-    final _preAdmissionController = TextEditingController();
+    final preNameController = TextEditingController();
+    final preAdmissionController = TextEditingController();
     String selectedSchool = (widget.adminRole == 'school_admin' && widget.adminSchool != null)
         ? widget.adminSchool!
         : (_schoolsList.isNotEmpty 
@@ -1845,7 +1839,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
       
       // Generate a sequential-like random suffix
       final String suffix = (1 + (DateTime.now().millisecond % 99)).toString().padLeft(2, '0');
-      _preAdmissionController.text = "$schoolCode-$lvlCode-$year$suffix";
+      preAdmissionController.text = "$schoolCode-$lvlCode-$year$suffix";
     }
 
     // Call initially to fill suggested
@@ -1873,7 +1867,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                 ),
                 const SizedBox(height: 20),
                 TextField(
-                  controller: _preNameController,
+                  controller: preNameController,
                   decoration: const InputDecoration(
                     labelText: "Student's Full Name",
                     prefixIcon: Icon(Icons.person),
@@ -1893,7 +1887,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                   )
                 else
                   DropdownButtonFormField<String>(
-                    value: selectedSchool,
+                    initialValue: selectedSchool,
                     decoration: const InputDecoration(
                       labelText: "School",
                       prefixIcon: Icon(Icons.school),
@@ -1920,7 +1914,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                   ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: selectedLevel,
+                  initialValue: selectedLevel,
                   decoration: const InputDecoration(
                     labelText: "Class / Level",
                     prefixIcon: Icon(Icons.grade),
@@ -1938,7 +1932,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                 ),
                 const SizedBox(height: 16),
                 TextField(
-                  controller: _preAdmissionController,
+                  controller: preAdmissionController,
                   decoration: const InputDecoration(
                     labelText: "Admission Number (Username)",
                     prefixIcon: Icon(Icons.badge),
@@ -1961,8 +1955,8 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () async {
-                final String fullName = _preNameController.text.trim();
-                final String admissionNumber = _preAdmissionController.text.trim().toUpperCase();
+                final String fullName = preNameController.text.trim();
+                final String admissionNumber = preAdmissionController.text.trim().toUpperCase();
                 
                 if (fullName.isEmpty || admissionNumber.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -2042,20 +2036,18 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
   }
 
   void _showPreRegisterTeacherDialog() {
-    final _preNameController = TextEditingController();
-    final _preEmployeeController = TextEditingController();
-    final _prePhoneController = TextEditingController();
+    final preNameController = TextEditingController();
+    final preEmployeeController = TextEditingController();
+    final prePhoneController = TextEditingController();
     
     String selectedSchool = (widget.adminRole == 'school_admin' && widget.adminSchool != null)
         ? widget.adminSchool!
         : (_schoolsList.isNotEmpty 
             ? _schoolsList.first.schoolName 
             : 'Westfield Academy');
-
-    const allLevels = [
-      'Standard 4', 'Standard 7',
-    ];
-    final Map<String, bool> levelChecks = { for (var l in allLevels) l: true };
+        
+    bool teachesStd4 = true;
+    bool teachesStd7 = true;
 
     // Auto-generation helper
     void updateSuggestedEmployee() {
@@ -2076,7 +2068,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
       
       // Sequential number suffix
       final String suffix = (1 + (DateTime.now().millisecond % 99)).toString().padLeft(3, '0');
-      _preEmployeeController.text = "${schoolPrefix}-TCH-$suffix";
+      preEmployeeController.text = "$schoolPrefix-TCH-$suffix";
     }
 
     // Call initially to fill suggested
@@ -2104,7 +2096,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                 ),
                 const SizedBox(height: 20),
                 TextField(
-                  controller: _preNameController,
+                  controller: preNameController,
                   decoration: const InputDecoration(
                     labelText: "Teacher's Full Name",
                     prefixIcon: Icon(Icons.person),
@@ -2124,7 +2116,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                   )
                 else
                   DropdownButtonFormField<String>(
-                    value: selectedSchool,
+                    initialValue: selectedSchool,
                     decoration: const InputDecoration(
                       labelText: "School",
                       prefixIcon: Icon(Icons.school),
@@ -2151,7 +2143,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                   ),
                 const SizedBox(height: 16),
                 TextField(
-                  controller: _prePhoneController,
+                  controller: prePhoneController,
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(
                     labelText: "Phone Number (Optional)",
@@ -2161,7 +2153,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                 ),
                 const SizedBox(height: 16),
                 TextField(
-                  controller: _preEmployeeController,
+                  controller: preEmployeeController,
                   decoration: const InputDecoration(
                     labelText: "Employee Number (Username)",
                     prefixIcon: Icon(Icons.badge),
@@ -2174,15 +2166,24 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                   alignment: Alignment.centerLeft,
                   child: Text("Classes / Levels Taught:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 ),
-                ...allLevels.map((level) => CheckboxListTile(
-                  title: Text(level),
-                  value: levelChecks[level] ?? false,
+                CheckboxListTile(
+                  title: const Text("Standard 4"),
+                  value: teachesStd4,
                   activeColor: Colors.teal.shade800,
                   controlAffinity: ListTileControlAffinity.leading,
                   onChanged: (val) {
-                    setDlgState(() => levelChecks[level] = val!);
+                    setDlgState(() => teachesStd4 = val!);
                   },
-                )),
+                ),
+                CheckboxListTile(
+                  title: const Text("Standard 7"),
+                  value: teachesStd7,
+                  activeColor: Colors.teal.shade800,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  onChanged: (val) {
+                    setDlgState(() => teachesStd7 = val!);
+                  },
+                ),
               ],
             ),
           ),
@@ -2198,9 +2199,9 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () async {
-                final String fullName = _preNameController.text.trim();
-                final String employeeNumber = _preEmployeeController.text.trim().toUpperCase();
-                final String phone = _prePhoneController.text.trim();
+                final String fullName = preNameController.text.trim();
+                final String employeeNumber = preEmployeeController.text.trim().toUpperCase();
+                final String phone = prePhoneController.text.trim();
                 
                 if (fullName.isEmpty || employeeNumber.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -2209,14 +2210,16 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                   return;
                 }
 
-                if (!levelChecks.values.any((v) => v)) {
+                if (!teachesStd4 && !teachesStd7) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("Please select at least one class taught."), backgroundColor: Colors.red),
                   );
                   return;
                 }
 
-                final List<String> classes = allLevels.where((l) => levelChecks[l] == true).toList();
+                final List<String> classes = [];
+                if (teachesStd4) classes.add("Standard 4");
+                if (teachesStd7) classes.add("Standard 7");
 
                 Navigator.pop(ctx);
                 
@@ -2306,7 +2309,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
     bool passVisible = false;
     String? createdCredentials;
 
-    void _generateSuggestedUsername() {
+    void generateSuggestedUsername() {
       final schoolObj = _schoolsList.firstWhere(
         (s) => s.schoolName == selectedSchool,
         orElse: () => School(id: '', schoolName: selectedSchool, region: '', district: '', code: selectedSchool.substring(0, 3)),
@@ -2318,7 +2321,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
       usernameCtrl.text = '${prefix}_admin$suffix';
     }
 
-    void _generateTempPassword() {
+    void generateTempPassword() {
       final schoolObj = _schoolsList.firstWhere(
         (s) => s.schoolName == selectedSchool,
         orElse: () => School(id: '', schoolName: selectedSchool, region: '', district: '', code: selectedSchool.substring(0, 3)),
@@ -2329,8 +2332,8 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
       tempPassCtrl.text = '${prefix}admin#${DateTime.now().year}';
     }
 
-    _generateSuggestedUsername();
-    _generateTempPassword();
+    generateSuggestedUsername();
+    generateTempPassword();
 
     showDialog(
       context: context,
@@ -2452,7 +2455,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
-                        value: selectedSchool,
+                        initialValue: selectedSchool,
                         decoration: InputDecoration(
                           labelText: "Assigned School",
                           prefixIcon: const Icon(Icons.school),
@@ -2466,8 +2469,8 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                         onChanged: (val) {
                           setDlgState(() {
                             selectedSchool = val!;
-                            _generateSuggestedUsername();
-                            _generateTempPassword();
+                            generateSuggestedUsername();
+                            generateTempPassword();
                           });
                         },
                       ),
@@ -2618,142 +2621,6 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // ADMIN SETTINGS DIALOG
-  // Configure Supabase Service Role Key (needed for password resets).
-  // ─────────────────────────────────────────────────────────────────────────
-  void _showAdminSettingsDialog() {
-    final keyCtrl = TextEditingController(text: AppSettings.supabaseServiceRoleKey.value);
-    bool keyVisible = false;
-    bool isSaving = false;
-    bool saved = false;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.settings, color: Colors.blue.shade800, size: 22),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("Admin Settings", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    Text("Supabase configuration", style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.amber.shade300),
-                  ),
-                  child: const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.info_outline, size: 16, color: Colors.amber),
-                          SizedBox(width: 6),
-                          Text("Why is this needed?", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        ],
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        "The Service Role Key is required to reset passwords for other users. "
-                        "Without it, the Reset Password function cannot update Supabase Auth.\n\n"
-                        "🔑 Where to find it:\n"
-                        "Supabase Dashboard → Project Settings → API → service_role (secret) key",
-                        style: TextStyle(fontSize: 12, height: 1.5, color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: keyCtrl,
-                  obscureText: !keyVisible,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                  decoration: InputDecoration(
-                    labelText: "Supabase Service Role Key",
-                    hintText: "eyJhbGciOiJIUz...",
-                    prefixIcon: const Icon(Icons.vpn_key_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    helperText: "Stored locally on this device only",
-                    suffixIcon: IconButton(
-                      icon: Icon(keyVisible ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setDlgState(() => keyVisible = !keyVisible),
-                    ),
-                  ),
-                ),
-                if (saved) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green.shade300),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green.shade700, size: 16),
-                        const SizedBox(width: 8),
-                        const Text("Key saved! Password resets are now enabled.", style: TextStyle(fontSize: 12, color: Colors.black87)),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Close")),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0D47A1),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: isSaving
-                  ? null
-                  : () async {
-                      setDlgState(() => isSaving = true);
-                      await AppSettings.updateSupabaseServiceRoleKey(keyCtrl.text.trim());
-                      setDlgState(() {
-                        isSaving = false;
-                        saved = true;
-                      });
-                    },
-              child: isSaving
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Text("Save Key"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
   // ADMIN RESET PASSWORD
   // Admin issues a new temporary password for any managed user.
   // On next login, the user is forced to create their own password.
@@ -2763,22 +2630,6 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
     final String userName = profile['full_name']?.toString() ?? 'User';
     final String userRole = (profile['role']?.toString() ?? 'student').toLowerCase();
     final String username = profile['username']?.toString() ?? '';
-    final String userSchool = profile['school']?.toString() ?? '';
-
-    // ── School Admin scope check: only allow resetting users of their school ──
-    if (widget.adminRole == 'school_admin' && widget.adminSchool != null) {
-      final bool sameSchool = userSchool.trim().toLowerCase() == widget.adminSchool!.trim().toLowerCase();
-      if (!sameSchool) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Access Denied: You can only reset passwords for users in your school."),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-    }
-
     final tempPassCtrl = TextEditingController();
     bool passVisible = false;
     bool isResetting = false;
@@ -2938,35 +2789,13 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                             }
                             setDlgState(() => isResetting = true);
                             try {
-                              // ─── STEP 1: Change the REAL Supabase Auth password ───
-                              final authApiUrl = Uri.parse('$_supabaseUrl/auth/v1/admin/users/$userId');
-                              final authResponse = await http.put(
-                                authApiUrl,
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                  'apikey': _supabaseServiceRoleKey,
-                                  'Authorization': 'Bearer $_supabaseServiceRoleKey',
-                                },
-                                body: jsonEncode({'password': tempPass}),
-                              );
-
-                              if (authResponse.statusCode != 200) {
-                                final body = jsonDecode(authResponse.statusCode == 200
-                                    ? authResponse.body
-                                    : authResponse.body);
-                                throw Exception(
-                                  'Supabase Auth API error (${authResponse.statusCode}): '
-                                  '${body['message'] ?? body['error_description'] ?? authResponse.body}',
-                                );
-                              }
-
-                              // ─── STEP 2: Flag must_change_password so user is forced to set a personal password ───
+                              // Flag must_change_password so user is forced to reset on next login
                               await Supabase.instance.client
                                   .from('profiles')
                                   .update({'must_change_password': true})
                                   .eq('id', userId);
 
-                              // ─── STEP 3: Audit log ───
+                              // Log the reset action with full audit trail
                               await AuditLogService.log(
                                 action: 'ADMIN_RESET_PASSWORD',
                                 details: 'Admin "${widget.adminName}" reset password for "$userName" (Role: ${userRole.toUpperCase()}, Username: $username). Temporary password issued. User must change on next login.',
@@ -2981,11 +2810,7 @@ ON public.school_admin_records FOR ALL TO authenticated USING (true) WITH CHECK 
                             } catch (e) {
                               setDlgState(() => isResetting = false);
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Reset failed: ${e.toString().replaceAll('Exception:', '').trim()}'),
-                                  backgroundColor: Colors.red,
-                                  duration: const Duration(seconds: 8),
-                                ),
+                                SnackBar(content: Text('Reset failed: $e'), backgroundColor: Colors.red),
                               );
                             }
                           },

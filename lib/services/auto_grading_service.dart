@@ -15,29 +15,6 @@ import '../models/homework_model.dart';
 import '../main.dart';
 import 'web_safe_file.dart';
 
-/// Thrown when Gemini AI grading fails after all retries.
-/// The UI should catch this and show a connectivity retry prompt.
-class GradingNetworkException implements Exception {
-  final String message;
-  const GradingNetworkException(this.message);
-  @override
-  String toString() => 'GradingNetworkException: $message';
-}
-
-/// Internal helper that describes one grading attempt.
-class _GradingAttempt {
-  final String label;
-  final String? teacherFileUrl;
-  final File? studentLocalFile;
-  final int delayBeforeSeconds;
-  const _GradingAttempt({
-    required this.label,
-    required this.teacherFileUrl,
-    required this.studentLocalFile,
-    required this.delayBeforeSeconds,
-  });
-}
-
 class AutoGradingResult {
   final double score; // 0.0 - 100.0
   final String feedback; // Concise, encouraging AI explanation
@@ -145,15 +122,6 @@ class AutoGradingService {
   // -----------------------------------------------------------
   /// Automatically grades a student submission.
   /// Runs OCR on the file if it is an image, then queries Gemini or uses fallback.
-  /// Grades a student submission.
-  ///
-  /// QUIZ homework (templateQuestions provided):
-  ///   Uses the local rule engine — pre-set answers, 100 % accurate, works offline.
-  ///
-  /// DOCUMENT homework (file / description uploaded by teacher):
-  ///   Gemini AI is MANDATORY. Retried up to 3 times with increasing delays.
-  ///   If all attempts fail a [GradingNetworkException] is thrown — the UI
-  ///   shows "No internet — tap Retry". We never save a wrong score.
   static Future<AutoGradingResult> gradeSubmission({
     required String homeworkTitle,
     required String homeworkDescription,
@@ -179,22 +147,6 @@ class AutoGradingService {
       if (studentTextAnswer.isNotEmpty) studentTextAnswer,
       if (extractedText.isNotEmpty) "[Extracted from Uploaded Image (OCR)]:\n$extractedText",
     ].join("\n\n");
-    // 1. OCR student image (mobile only)
-    if (localFile != null && _isImageFile(localFile.path)) {
-      try {
-        extractedText = await _performOcr(localFile);
-        debugPrint('[AutoGrading] OCR success — ${extractedText.length} chars');
-      } catch (e) {
-        debugPrint('[AutoGrading] OCR skipped: $e');
-      }
-    }
-
-    // 2. Build combined student submission
-    final String combinedStudentSubmission = [
-      if (studentTextAnswer.isNotEmpty) studentTextAnswer,
-      if (extractedText.isNotEmpty)
-        '[Extracted from Uploaded Image (OCR)]:\n$extractedText',
-    ].join('\n\n');
 
     if (combinedStudentSubmission.trim().isEmpty) {
       return const AutoGradingResult(
@@ -287,167 +239,6 @@ class AutoGradingService {
     );
   }
 
-        feedback:
-            'We could not find any text answers or readable handwriting in '
-            'your submission. Please try again or re-upload a clearer picture.',
-        gradingSource: 'System',
-        recommendation:
-            'Rewrite your answers clearly on paper or type them directly.',
-      );
-    }
-
-    // 3. OCR teacher sheet for rule-engine fallback (used by quiz path)
-    String teacherOcrText = '';
-    if (!kIsWeb &&
-        teacherFileUrl != null &&
-        teacherFileUrl.isNotEmpty &&
-        _isImageFile(teacherFileUrl)) {
-      try {
-        final res = await http
-            .get(Uri.parse(teacherFileUrl))
-            .timeout(const Duration(seconds: 20));
-        if (res.statusCode == 200) {
-          final tmp = File(
-            '${Directory.systemTemp.path}/teacher_${DateTime.now().millisecondsSinceEpoch}.jpg',
-          );
-          await tmp.writeAsBytes(res.bodyBytes);
-          teacherOcrText = await _performOcr(tmp);
-          try { await tmp.delete(); } catch (_) {}
-          debugPrint('[AutoGrading] Teacher OCR: ${teacherOcrText.length} chars');
-        }
-      } catch (e) {
-        debugPrint('[AutoGrading] Teacher OCR skipped: $e');
-      }
-    }
-
-    // ── Quiz homework: rule engine (offline-capable, 100 % accurate) ──
-    final bool isQuizHomework =
-        templateQuestions != null && templateQuestions.isNotEmpty;
-
-    if (isQuizHomework) {
-      debugPrint('[AutoGrading] Quiz homework → rule engine.');
-      final r = _gradeWithRuleEngine(
-        homeworkTitle: homeworkTitle,
-        homeworkDescription: homeworkDescription,
-        studentSubmission: combinedStudentSubmission,
-        templateQuestions: templateQuestions,
-        teacherOcrText: teacherOcrText,
-        geminiError: null,
-      );
-      return AutoGradingResult(
-        score: r.score,
-        feedback: r.feedback,
-        extractedText: extractedText,
-        gradingSource: r.gradingSource,
-        correctCount: r.correctCount,
-        totalQuestions: r.totalQuestions,
-        recommendation: r.recommendation,
-      );
-    }
-
-    // ── Document homework: Gemini AI with local Rule Engine fallback ──────────
-    final apiKey = _apiKey;
-    bool isGeminiAvailable = apiKey.isNotEmpty && apiKey != 'YOUR_GEMINI_API_KEY_HERE';
-    String lastError = isGeminiAvailable ? '' : 'Gemini API key is not configured.';
-
-    if (isGeminiAvailable) {
-      // Three progressive attempts — each removes one heavy payload so that
-      // slow / metered connections still have a chance.
-      final attempts = [
-        _GradingAttempt(
-          label: 'Attempt 1 (full vision)',
-          teacherFileUrl: teacherFileUrl,
-          studentLocalFile: localFile,
-          delayBeforeSeconds: 0,
-        ),
-        _GradingAttempt(
-          label: 'Attempt 2 (teacher file only)',
-          teacherFileUrl: teacherFileUrl,
-          studentLocalFile: null,
-          delayBeforeSeconds: 3,
-        ),
-        _GradingAttempt(
-          label: 'Attempt 3 (text-only)',
-          teacherFileUrl: null,
-          studentLocalFile: null,
-          delayBeforeSeconds: 6,
-        ),
-      ];
-
-      for (final attempt in attempts) {
-        if (attempt.delayBeforeSeconds > 0) {
-          debugPrint(
-            '[AutoGrading] Waiting ${attempt.delayBeforeSeconds}s before ${attempt.label}...',
-          );
-          await Future.delayed(Duration(seconds: attempt.delayBeforeSeconds));
-        }
-
-        try {
-          debugPrint('[AutoGrading] ${attempt.label}...');
-          final result = await _gradeWithGemini(
-            homeworkTitle: homeworkTitle,
-            homeworkDescription: homeworkDescription,
-            studentSubmission: combinedStudentSubmission,
-            apiKey: apiKey,
-            teacherFileUrl: attempt.teacherFileUrl,
-            studentLocalFile: attempt.studentLocalFile,
-          );
-
-          debugPrint('[AutoGrading] ✓ ${attempt.label} succeeded.');
-          final String jsonFeedback = jsonEncode({
-            'feedback': result['feedback'],
-            'recommendation': result['recommendation'],
-            'revisionQuestions': result['revisionQuestions'] ?? <String>[],
-          });
-          return AutoGradingResult(
-            score: (result['score'] as num).toDouble(),
-            feedback: jsonFeedback,
-            extractedText: extractedText,
-            gradingSource: 'Gemini AI',
-            correctCount: result['correctCount'] as int?,
-            totalQuestions: result['totalQuestions'] as int?,
-            recommendation: result['recommendation']?.toString() ??
-                'Review your teacher\'s corrections.',
-            revisionQuestions:
-                List<String>.from(result['revisionQuestions'] ?? []),
-          );
-        } catch (e) {
-          lastError = e.toString();
-          debugPrint('[AutoGrading] ${attempt.label} failed: $lastError');
-        }
-      }
-    }
-
-    // Gemini failed or was unavailable. Let's fall back to our local smart rule engine!
-    debugPrint('[AutoGrading] Gemini unavailable or failed ($lastError). Falling back to local Rule Engine...');
-    try {
-      final r = _gradeWithRuleEngine(
-        homeworkTitle: homeworkTitle,
-        homeworkDescription: homeworkDescription,
-        studentSubmission: combinedStudentSubmission,
-        templateQuestions: templateQuestions,
-        teacherOcrText: teacherOcrText,
-        geminiError: lastError,
-      );
-      if (r.score >= 0) {
-        debugPrint('[AutoGrading] Local Rule Engine succeeded with score: ${r.score}');
-        return r;
-      }
-    } catch (fallbackErr) {
-      debugPrint('[AutoGrading] Local Rule Engine fallback failed: $fallbackErr');
-    }
-
-    // If both failed and we couldn't grade:
-    throw GradingNetworkException(
-      'Could not grade submission: Gemini API error ($lastError) and rule engine fallback failed.',
-    );
-  }
-
-  // Public wrapper methods for local OCR and rule-based math extraction
-  static Future<String> performOcr(File file) => _performOcr(file);
-  static Map<int, double?> extractQuestionsFromDescription(String description) =>
-      _extractQuestionsFromDescription(description);
-
   // -----------------------------------------------------------
   // GOOGLE ML KIT OCR PIPELINE
   // -----------------------------------------------------------
@@ -537,14 +328,6 @@ You are a professional, highly precise AI homework marking engine for primary an
 Your job is to:
 1. Carefully read the teacher's homework assignment (from the homework sheet image/document AND/OR the text description below).
 2. Solve or research EVERY question on the homework to determine the 100% correct answer for each — regardless of subject (Mathematics, Science, English, Swahili, Geography, History, Social Studies, CRE/IRE, Mixed-topic, etc.).
-    // ── Mathematics Homework Grading Prompt ──
-    // Handles: Mathematics MCQ, Fill-in-the-blank, Short answer, and Word problems.
-    final String prompt = """
-You are a professional, highly precise AI Mathematics homework marking engine for primary and secondary school students.
-
-Your job is to:
-1. Carefully read the teacher's homework assignment (from the homework sheet image/document AND/OR the text description below).
-2. Solve EVERY mathematics question on the homework to determine the 100% correct numerical/analytical answer for each.
 3. Extract the student's answers from their submission (typed text and/or handwritten image).
 4. Mark each question: CORRECT if the student's answer matches the correct answer, INCORRECT otherwise.
 5. Produce a fair, honest, and detailed result.
@@ -560,20 +343,6 @@ ${homeworkDescription.isNotEmpty ? homeworkDescription : "(See the attached home
  STUDENT'S TYPED ANSWER (if any)
 ═══════════════════════════════════════════════════════
 ${studentSubmission.isNotEmpty ? studentSubmission : "(See the attached student answer sheet image)"}
-
-⚠️ CRITICAL NOTE ON READING STUDENT TYPED ANSWERS:
-The student may format their answers as "1.10488" meaning Question 1 Answer is 10488.
-The number before the dot/period is the QUESTION NUMBER. The number after is the ANSWER.
-Do NOT treat "1.10488" as a single decimal number 1.10488.
-Always read student answers as: [question_number].[answer_value]
-For example:
-  1.10488   → Q1 answer = 10488
-  2.104     → Q2 answer = 104
-  3.120     → Q3 answer = 120
-  4.75%     → Q4 answer = 75%
-  5.1575000 → Q5 answer = 1,575,000
-Numbers with or without commas are equivalent (10488 = 10,488).
-Percentages: 75% = 75 percent — treat as equivalent to the decimal/percentage form.
 
 ═══════════════════════════════════════════════════════
  MARKING RULES — READ CAREFULLY
@@ -602,24 +371,10 @@ STEP 3 – EXTRACT STUDENT'S ANSWERS:
   • Typed text answers are in the student submission section above.
   • Handwritten answers will be in the student's image attachment (if provided).
   • For handwriting: be generous with legibility — if the intent is clear and the value is correct, mark as CORRECT.
-  • Compute the correct numerical result step-by-step for each math question.
-  • For MCQ (Multiple Choice): Identify the correct mathematical option from those provided.
-  • For Fill-in-the-blank: Determine the correct number or expression that completes the answer.
-  • For Word problems: Solve the question step-by-step to arrive at the final number.
-  • If a question is ambiguous, apply reasonable mathematical interpretation and note it in feedback.
-
-STEP 3 – EXTRACT STUDENT'S ANSWERS:
-  • Typed text answers are in the student submission section above.
-  • IMPORTANT: If the student wrote "1.10488", read this as Q1=10488, NOT as a decimal 1.10488.
-  • Handwritten answers will be in the student's image attachment (if provided).
-  • For handwriting: be generous with legibility — if the intent is clear and the value is correct, mark as CORRECT.
-  • Numbers with commas and without commas are the same: 10,488 = 10488.
-  • Percentages: 75% is the same as 75 percent. Accept both forms.
   • Match answers by question number/letter.
 
 STEP 4 – MARK EACH QUESTION:
   • Compare the student's answer with the correct answer.
-  • Accept minor formatting differences: 10488 = 10,488; 75% = 75 percent; 120cm² = 120.
   • Count correct answers as C.
   • Count unanswered questions as INCORRECT.
   • Partial credit: only award full marks — no half marks unless explicitly instructed.
@@ -953,8 +708,6 @@ IMPORTANT:
   /// Parses homework description/OCR text to extract questions and calculate correct answers.
   static Map<int, double> _extractQuestionsFromDescription(String description) {
     Map<int, double> questions = {};
-  static Map<int, double?> _extractQuestionsFromDescription(String description) {
-    Map<int, double?> questions = {};
     final lines = description.split('\n');
     final qNumRegex = RegExp(r'(?:^|[^0-9])(\d+)\s*[\.\)\-\:]');
     final mathRegex = RegExp(r'(\d+[\d\s\+\-\*\/x×÷,\.]*\d+)');
@@ -1015,18 +768,6 @@ IMPORTANT:
         
         if (val != null) {
           questions[qNum] = val;
-        // Store the value (even if null) so the question number is not skipped!
-        questions[qNum] = val;
-      }
-    }
-
-    // Fill in gaps: if maxQ is e.g. 5, make sure keys 1, 2, 3, 4, 5 are all present!
-    if (questions.isNotEmpty) {
-      int maxQ = questions.keys.reduce((a, b) => a > b ? a : b);
-      if (maxQ > 100) maxQ = 100; // sanity check
-      for (int i = 1; i <= maxQ; i++) {
-        if (!questions.containsKey(i)) {
-          questions[i] = null;
         }
       }
     }
@@ -1078,16 +819,6 @@ IMPORTANT:
     
     // Preprocess: merge lines that consist only of question numbers (e.g., "1." or "2)")
     // with the subsequent line to handle cases where OCR separates bounding boxes into separate lines.
-  /// Handles formats like:
-  ///   "1.10488"  → Q1 = 10488   (question-number.answer, NOT a decimal)
-  ///   "2.104"    → Q2 = 104
-  ///   "4.75%"    → Q4 = 75
-  ///   "5.1575000"→ Q5 = 1575000
-  static Map<int, double> _extractStudentAnswers(String submission) {
-    Map<int, double> answers = {};
-
-    // ── Step 1: Preprocess lines ──────────────────────────────────────────────
-    // Merge lines that are ONLY a question number ("1.", "2)") with the next line.
     final rawLines = submission.split('\n');
     List<String> lines = [];
     for (int i = 0; i < rawLines.length; i++) {
@@ -1099,10 +830,6 @@ IMPORTANT:
         final nextLine = rawLines[i + 1].trim();
         lines.add("$line $nextLine");
         i++; // skip the next line as it was merged
-      final isJustQNum = RegExp(r'^\d+\s*[\.\)\-\:]?$').hasMatch(line);
-      if (isJustQNum && i + 1 < rawLines.length) {
-        lines.add('$line ${rawLines[i + 1].trim()}');
-        i++;
       } else {
         lines.add(line);
       }
@@ -1153,97 +880,6 @@ IMPORTANT:
             final parts = cleanSegment.split('=');
             final rightSide = parts.last.trim();
             final numMatch = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(rightSide);
-
-    // ── Step 2: Detect "N.answer" format (e.g. "1.10488", "3.120", "4.75%") ──
-    // Pattern: line starts (optionally with whitespace) with digits, then a dot,
-    // then MORE digits immediately — meaning it's "Q_NUM.ANSWER", not a decimal.
-    // We detect this by checking that the part before the first dot is a small
-    // integer (≤ 100) and the part after is a longer or equal-length number.
-    bool usedQDotFormat = false;
-    for (final line in lines) {
-      // Skip header-like lines (e.g. "Answers", "Mathematics")
-      if (!RegExp(r'^\s*\d').hasMatch(line)) continue;
-
-      // Match patterns like "1.10488" or "  2.104" or "4.75%" at the start of the line
-      final dotFmtMatch = RegExp(
-        r'^\s*(\d{1,3})[\.\ ](\d[\d,\.]*%?)',
-      ).firstMatch(line);
-
-      if (dotFmtMatch != null) {
-        final int qNum = int.tryParse(dotFmtMatch.group(1)!) ?? 0;
-        if (qNum < 1 || qNum > 50) continue;
-
-        // Strip % sign and commas from the answer part
-        final String rawAns = dotFmtMatch.group(2)!.replaceAll(',', '').replaceAll('%', '').trim();
-        final double? val = double.tryParse(rawAns);
-        if (val != null) {
-          answers[qNum] = val;
-          usedQDotFormat = true;
-        }
-      }
-    }
-
-    // If Q.answer format worked for most lines, return early
-    if (usedQDotFormat && answers.isNotEmpty) {
-      debugPrint('[RuleEngine] Used Q.Answer format. Parsed answers: $answers');
-      return answers;
-    }
-
-    // ── Step 3: Standard numbered-line parser ────────────────────────────────
-    // Handles formats like:
-    //   "1. 10488"  (space after dot)
-    //   "1) 104"
-    //   "Q1: 120"
-    //   Lines with = sign (e.g. OCR handwriting)
-    answers.clear();
-
-    // Regex that ALLOWS digits immediately after the separator (to catch "1.10488")
-    // We use a broader pattern and do qNum validation ourselves.
-    final qNumRegex = RegExp(r'(?:^\s*|[^\d])(\d{1,3})\s*[\.)\-\:]\s*');
-
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i].trim();
-      if (line.isEmpty) continue;
-
-      // Skip status-bar time patterns (e.g. "16:57")
-      if (RegExp(r'^\d{1,2}:\d{2}$').hasMatch(line)) continue;
-
-      final matches = qNumRegex.allMatches(line).toList();
-      for (int k = 0; k < matches.length; k++) {
-        final m = matches[k];
-        final int qNum = int.tryParse(m.group(1)!) ?? 0;
-        if (qNum < 1 || qNum > 100) continue;
-
-        // Skip if this looks like a status bar time (e.g. hour:minute)
-        if (line.contains(RegExp(r'\b\d{1,2}:\d{2}\b'))) {
-          final timeMatch = RegExp(r'\b(\d{1,2}):(\d{2})\b').firstMatch(line);
-          if (timeMatch != null && int.parse(timeMatch.group(1)!) == qNum) continue;
-        }
-
-        // Collect the text segment after the question number marker
-        final int start = m.end;
-        final int end = (k + 1 < matches.length) ? matches[k + 1].start : line.length;
-        final List<String> qSegments = [line.substring(start, end).trim()];
-
-        // Also look at following lines until the next question number
-        int nextLineIdx = i + 1;
-        while (nextLineIdx < lines.length) {
-          final nextLine = lines[nextLineIdx].trim();
-          if (qNumRegex.hasMatch(nextLine)) break;
-          qSegments.add(nextLine);
-          nextLineIdx++;
-        }
-
-        double? extractedVal;
-
-        // Priority 1: explicit "=" sign (e.g. handwriting OCR "456 × 23 = 10,488")
-        for (final segment in qSegments) {
-          final clean = segment.replaceAll(',', '');
-          if (clean.contains('=')) {
-            final rightSide = clean.split('=').last.trim();
-            // Strip % and unit suffixes
-            final stripped = rightSide.replaceAll(RegExp(r'[%a-zA-Z²³]'), '').trim();
-            final numMatch = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(stripped);
             if (numMatch != null) {
               extractedVal = double.tryParse(numMatch.group(1)!);
               if (extractedVal != null) break;
@@ -1263,34 +899,11 @@ IMPORTANT:
             final matches = RegExp(r'(\d+(?:\.\d+)?)').allMatches(cleanSegment).toList();
             if (matches.isNotEmpty) {
               extractedVal = double.tryParse(matches.last.group(1)!);
-          // "Answer: 10488" or "Ans 104"
-          final ansMatch = RegExp(
-            r'(?:answer|ans|soln)\s*[:\-]?\s*(\d[\d,]*(?:\.\d+)?)',
-            caseSensitive: false,
-          ).firstMatch(clean);
-          if (ansMatch != null) {
-            final stripped = ansMatch.group(1)!.replaceAll(',', '');
-            extractedVal = double.tryParse(stripped);
-            if (extractedVal != null) break;
-          }
-        }
-
-        // Priority 2: last number on the segment lines (strip % and units first)
-        if (extractedVal == null) {
-          for (final segment in qSegments.reversed) {
-            final clean = segment
-                .replaceAll(',', '')
-                .replaceAll(RegExp(r'[%a-zA-Z²³]'), ' ')
-                .trim();
-            final nums = RegExp(r'(\d+(?:\.\d+)?)').allMatches(clean).toList();
-            if (nums.isNotEmpty) {
-              extractedVal = double.tryParse(nums.last.group(1)!);
               if (extractedVal != null) break;
             }
           }
         }
         
-
         if (extractedVal != null) {
           answers[qNum] = extractedVal;
         }
@@ -1301,21 +914,12 @@ IMPORTANT:
     if (answers.isEmpty) {
       final allNums = RegExp(r'(\d+(?:\.\d+)?)').allMatches(submission.replaceAll(',', ''))
           .map((m) => double.parse(m.group(1)!))
-
-    // ── Step 4: Last-resort fallback — sequential number extraction ──────────
-    if (answers.isEmpty) {
-      final allNums = RegExp(r'(\d+(?:\.\d+)?)')
-          .allMatches(submission.replaceAll(',', ''))
-          .map((m) => double.tryParse(m.group(1)!))
-          .whereType<double>()
           .toList();
       for (int i = 0; i < allNums.length; i++) {
         answers[i + 1] = allNums[i];
       }
     }
     
-
-    debugPrint('[RuleEngine] Parsed student answers: $answers');
     return answers;
   }
 
@@ -1339,7 +943,6 @@ IMPORTANT:
     } else {
       // 2. Otherwise extract arithmetic solutions from description text
       Map<int, double> extractedMath = _extractQuestionsFromDescription(homeworkDescription);
-      Map<int, double?> extractedMath = _extractQuestionsFromDescription(homeworkDescription);
       
       // 3. If description is empty, dynamically extract math from teacher's sheet OCR!
       if (extractedMath.isEmpty && teacherOcrText.isNotEmpty) {
@@ -1348,9 +951,6 @@ IMPORTANT:
       
       extractedMath.forEach((k, v) {
         correctAnswers[k] = v % 1 == 0 ? v.toInt().toString() : v.toString();
-        if (v != null) {
-          correctAnswers[k] = v % 1 == 0 ? v.toInt().toString() : v.toString();
-        }
       });
     }
 
@@ -1410,31 +1010,6 @@ IMPORTANT:
     
     debugPrint("[RuleEngine] Final Correct answers: $correctAnswers");
     debugPrint("[RuleEngine] Final Student answers: $studentAnswers");
-
-    // ── GUARD: If we have NO correct answers to compare against, we cannot
-    // mark the work. Returning a false 0/5 would be dishonest and unfair.
-    // Instead return a "pending review" result so the teacher can mark it.
-    if (correctAnswers.isEmpty) {
-      final int detectedQs = studentAnswers.length;
-      final String pendingFeedback = jsonEncode({
-        'feedback': 'Your submission has been received and is awaiting teacher review. '
-            '${detectedQs > 0 ? 'We detected $detectedQs answer(s) in your submission.' : ''} '
-            'AI auto-grading requires the homework questions to be available as text. '
-            'Your teacher will mark this assignment shortly.',
-        'recommendation': 'Make sure your answers are clearly numbered (e.g. 1. answer, 2. answer) '
-            'so the teacher can easily match them to the questions.',
-        'revisionQuestions': <String>[],
-      });
-      return AutoGradingResult(
-        score: -1,  // sentinel: -1 means "pending, not scored"
-        feedback: pendingFeedback,
-        gradingSource: 'Pending Teacher Review',
-        correctCount: null,
-        totalQuestions: null,
-        recommendation: 'Your teacher will review and mark your submission.',
-        errorMessage: geminiError,
-      );
-    }
 
     // Determine absolute total questions count dynamically
     int totalQuestions = 0;

@@ -63,9 +63,6 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       _schoolName = widget.selectedSchool!;
     } else {
       _schoolName = "";
-      _schoolName = widget.selectedChild.toLowerCase().startsWith('a')
-          ? 'Mwangi Primary'
-          : 'Greenwood Academy';
     }
   }
 
@@ -75,7 +72,6 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       final studentRes = await supabase
           .from('profiles')
           .select('full_name, school')
-          .select('full_name')
           .eq('username', widget.selectedChild)
           .maybeSingle();
       if (studentRes != null) {
@@ -146,21 +142,6 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
             tLevel.contains(childLevel) ||
             childLevel.contains(tLevel);
 
-        final String? tSchool = t['school'];
-        final String? tLevel = t['level'];
-        
-        final String childSchool = _schoolName;
-        final String childLevel = widget.currentLevel;
-        
-        bool schoolMatches = tSchool == null ||
-            tSchool.trim().isEmpty ||
-            tSchool.toLowerCase().trim() == childSchool.toLowerCase().trim();
-            
-        bool levelMatches = tLevel == null ||
-            tLevel.toLowerCase() == 'teacher' ||
-            tLevel.toLowerCase().contains(childLevel.toLowerCase()) ||
-            childLevel.toLowerCase().contains(tLevel.toLowerCase());
-            
         return schoolMatches && levelMatches;
       }).toList();
     } catch (e) {
@@ -230,74 +211,6 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
         final String chatKey = "${widget.selectedChild}_${teacher['id']}";
         
         // Do not seed fake conversations; leave chat history empty until there is real data.
-        if (!data.containsKey(chatKey)) {
-          final now = DateTime.now();
-          List<Map<String, dynamic>> messagesList = [];
-          
-          if (i == 0) {
-            messagesList = [
-              {
-                'sender': 'teacher',
-                'senderName': teacher['name'],
-                'text': "Good morning! I wanted to share that ${widget.selectedChild} scored 87% on the math assessment 🎉",
-                'time': "10:18 AM",
-                'date': now.toIso8601String()
-              },
-              {
-                'sender': 'teacher',
-                'senderName': teacher['name'],
-                'text': "She/He needs a bit more practice on fractions. I've attached some exercises.",
-                'time': "10:19 AM",
-                'date': now.toIso8601String()
-              },
-              {
-                'sender': 'parent',
-                'senderName': 'You',
-                'text': "Thank you so much, ${teacher['name']}! That's wonderful news. We'll work on fractions this weekend.",
-                'time': "10:22 AM",
-                'date': now.toIso8601String()
-              }
-            ];
-            unreadCounts[chatKey] = 2;
-          } else if (i == 1) {
-            messagesList = [
-              {
-                'sender': 'teacher',
-                'senderName': teacher['name'],
-                'text': "Kindly confirm attendance for the upcoming parent-teacher conference.",
-                'time': "Yesterday",
-                'date': now.subtract(const Duration(days: 1)).toIso8601String()
-              }
-            ];
-            unreadCounts[chatKey] = 0;
-          } else if (i == 2) {
-            messagesList = [
-              {
-                'sender': 'teacher',
-                'senderName': teacher['name'],
-                'text': "Your child was absent today. Please let us know if they need any home support or catch-up materials.",
-                'time': "Mon",
-                'date': now.subtract(const Duration(days: 3)).toIso8601String()
-              }
-            ];
-            unreadCounts[chatKey] = 1;
-            urgents[chatKey] = true;
-          } else {
-            messagesList = [
-              {
-                'sender': 'teacher',
-                'senderName': teacher['name'],
-                'text': "Term 2 schedule has been updated with the new assessment blocks.",
-                'time': "Fri",
-                'date': now.subtract(const Duration(days: 5)).toIso8601String()
-              }
-            ];
-            unreadCounts[chatKey] = 0;
-          }
-          
-          data[chatKey] = messagesList;
-          dirty = true;
-        }
       }
 
       data['unread_counts'] = unreadCounts;
@@ -333,18 +246,6 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
         DateTime sortTime = DateTime.fromMillisecondsSinceEpoch(0);
         if (lastMsg['date'] != null) {
           sortTime = DateTime.parse(lastMsg['date']);
-        List<dynamic> history = data[chatKey] ?? [];
-        String lastMsgText = "No messages yet";
-        String lastMsgTime = "";
-        DateTime sortTime = DateTime.fromMillisecondsSinceEpoch(0);
-
-        if (history.isNotEmpty) {
-          final lastMsg = history.last;
-          lastMsgText = lastMsg['imagePath'] != null ? "📷 Attachment" : (lastMsg['text'] ?? "");
-          lastMsgTime = lastMsg['time'] ?? "";
-          if (lastMsg['date'] != null) {
-            sortTime = DateTime.parse(lastMsg['date']);
-          }
         }
 
         final unreadCount = unreadCounts[chatKey] ?? 0;
@@ -814,7 +715,6 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = true;
-  bool _isTyping = false;
   List<Map<String, dynamic>> _messages = [];
   Timer? _pollTimer;
 
@@ -1025,7 +925,6 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
       });
       _scrollToBottom();
       await _saveMessages();
-      _triggerDelayedResponse("Sent an image attachment.");
     } catch (e) {
       debugPrint("Error picking image: $e");
     }
@@ -1049,7 +948,6 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
       });
       _scrollToBottom();
       await _saveMessages();
-      _triggerDelayedResponse("Sent a document: $filename");
     } catch (e) {
       debugPrint("Error picking file: $e");
     }
@@ -1105,75 +1003,6 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
     }
 
     await _incrementTeacherUnreadCount();
-    // Trigger teacher response
-    _triggerDelayedResponse(text);
-  }
-
-  void _triggerDelayedResponse(String triggerText) {
-    setState(() => _isTyping = true);
-    _scrollToBottom();
-
-    Future.delayed(const Duration(seconds: 2), () async {
-      if (!mounted) return;
-
-      String reply = "";
-      final lower = triggerText.toLowerCase();
-
-      if (lower.contains("hello") || lower.contains("habari") || lower.contains("mambo")) {
-        reply = "Hello! Thank you for reaching out. How can I help you today?";
-      } else if (lower.contains("assessment") || lower.contains("results") || lower.contains("score") || lower.contains("mark")) {
-        reply = "Yes, Amani has been performing very well. The 87% score is a reflection of their hard work. Let's keep it up!";
-      } else if (lower.contains("fraction") || lower.contains("math") || lower.contains("homework")) {
-        reply = "I recommend working on worksheets 3 and 4 this weekend. They focus specifically on common denominators.";
-      } else if (lower.contains("absent") || lower.contains("sick")) {
-        reply = "I understand. I will mark the absence as excused. Please make sure she stays hydrated, and I'll send the handouts.";
-      } else {
-        reply = "Thank you for the update. I have noted this and will monitor Amani's progress accordingly in class.";
-      }
-
-      final now = DateTime.now();
-      final replyMsg = {
-        'sender': 'teacher',
-        'senderName': widget.teacher['name'],
-        'text': reply,
-        'time': DateFormat.jm().format(now),
-        'date': now.toIso8601String(),
-      };
-
-      if (_useDatabase) {
-        try {
-          await Supabase.instance.client.from('messages').insert({
-            'chat_key': widget.chatKey,
-            'sender': 'teacher',
-            'sender_name': widget.teacher['name'],
-            'text': reply,
-            'subject': '',
-            'priority': 'Normal',
-            'read': false,
-          });
-          setState(() {
-            _messages.add(replyMsg);
-            _isTyping = false;
-          });
-          _scrollToBottom();
-        } catch (e) {
-          debugPrint("Error saving teacher response to database: $e");
-          setState(() {
-            _messages.add(replyMsg);
-            _isTyping = false;
-          });
-          _scrollToBottom();
-          await _saveMessages();
-        }
-      } else {
-        setState(() {
-          _messages.add(replyMsg);
-          _isTyping = false;
-        });
-        _scrollToBottom();
-        await _saveMessages();
-      }
-    });
   }
 
   String _t(String en, String sw) {
@@ -1358,21 +1187,6 @@ class _ParentChatConversationScreenState extends State<ParentChatConversationScr
                   ),
           ),
           
-<<<<<<< HEAD
-=======
-          if (_isTyping)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _t("${widget.teacher['name']} is typing...", "${widget.teacher['name']} anaandika..."),
-                  style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12),
-                ),
-              ),
-            ),
-            
->>>>>>> 565fb55eeb95720e88d7c7747d4b40e2c005391a
           // Quick replies chips
           Container(
             height: 40,
@@ -1740,7 +1554,6 @@ class _ParentComposeMessageScreenState extends State<ParentComposeMessageScreen>
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
                         initialValue: _selectedSchool,
-                        value: _selectedSchool,
                         isExpanded: true,
                         decoration: InputDecoration(
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -1767,7 +1580,6 @@ class _ParentComposeMessageScreenState extends State<ParentComposeMessageScreen>
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
                         initialValue: widget.selectedChild,
-                        value: widget.selectedChild,
                         isExpanded: true,
                         decoration: InputDecoration(
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
